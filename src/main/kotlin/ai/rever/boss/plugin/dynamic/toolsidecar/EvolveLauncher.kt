@@ -46,6 +46,79 @@ class EvolveLauncher(private val services: SidecarServices) {
         return null
     }
 
+    /**
+     * Where evolution checkouts land when cloned: the house plugins umbrella if
+     * present, else a stable ~/BossTools fallback (mirrors tool-creator).
+     */
+    fun defaultCloneParent(): File {
+        val home = System.getProperty("user.home")
+        val umbrella = File(home, "Development/Boss/boss_plugins")
+        return if (umbrella.isDirectory) umbrella
+        else File(home, "BossTools").apply { mkdirs() }
+    }
+
+    /**
+     * Best-effort git URL for a plugin's repo: its manifest [LoadedPluginInfo.url]
+     * when that points at a git host, otherwise the house naming convention
+     * `risa-labs-inc/boss-plugin-<lastIdSegment>`. Always editable in the UI.
+     */
+    fun guessGitUrl(info: LoadedPluginInfo): String {
+        val url = info.url.trim()
+        if (url.contains("github.com") || url.endsWith(".git")) {
+            return if (url.endsWith(".git")) url else "${url.trimEnd('/')}.git"
+        }
+        val slug = info.pluginId.substringAfterLast('.')
+        return "https://github.com/risa-labs-inc/boss-plugin-$slug.git"
+    }
+
+    /** Directory name a clone of [gitUrl] would create. */
+    fun repoDirName(gitUrl: String): String =
+        gitUrl.trimEnd('/').substringAfterLast('/').removeSuffix(".git")
+
+    /**
+     * Clone [gitUrl] into [parentDir] and record the result as this plugin's repo
+     * override. If the target dir already exists and is a git checkout, reuse it
+     * (idempotent). Streams git output to [onLine].
+     */
+    fun cloneRepo(
+        info: LoadedPluginInfo,
+        gitUrl: String,
+        parentDir: File,
+        onLine: (String) -> Unit,
+    ): Result<File> = runCatching {
+        require(gitUrl.isNotBlank()) { "No git URL" }
+        parentDir.mkdirs()
+        val dir = File(parentDir, repoDirName(gitUrl))
+        if (File(dir, ".git").isDirectory) {
+            onLine("Reusing existing checkout at ${dir.absolutePath}")
+        } else {
+            require(!dir.exists()) { "${dir.absolutePath} exists but is not a git checkout" }
+            onLine("$ git clone $gitUrl ${dir.name}")
+            runGit(parentDir, listOf("clone", gitUrl, dir.name), onLine).getOrThrow()
+            require(File(dir, ".git").isDirectory) { "Clone did not produce a git repo" }
+        }
+        setRepoOverride(info.pluginId, dir.absolutePath)
+        dir
+    }
+
+    private fun runGit(dir: File, args: List<String>, onLine: (String) -> Unit): Result<Unit> = runCatching {
+        val process = ProcessBuilder(listOf("git") + args)
+            .directory(dir)
+            .redirectErrorStream(true)
+            .also { pb ->
+                val home = System.getProperty("user.home")
+                val extras = listOf("$home/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin")
+                pb.environment()["PATH"] = (extras + (pb.environment()["PATH"] ?: "")).joinToString(File.pathSeparator)
+            }
+            .start()
+        process.inputStream.bufferedReader().useLines { it.forEach(onLine) }
+        if (!process.waitFor(5, java.util.concurrent.TimeUnit.MINUTES)) {
+            process.destroyForcibly()
+            error("git ${args.first()} timed out")
+        }
+        if (process.exitValue() != 0) error("git ${args.first()} failed (exit ${process.exitValue()})")
+    }
+
     /** Write skills + open the CLI terminal. Returns a human-readable status. */
     fun launchEvolve(
         info: LoadedPluginInfo,

@@ -94,6 +94,13 @@ class SidecarTabViewModel(
     private val _task = MutableStateFlow("")
     val task: StateFlow<String> = _task.asStateFlow()
 
+    /** Editable git URL + parent dir for cloning a repo when none is found locally. */
+    private val _cloneUrl = MutableStateFlow("")
+    val cloneUrl: StateFlow<String> = _cloneUrl.asStateFlow()
+
+    private val _cloneParent = MutableStateFlow(services.evolveLauncher.defaultCloneParent().absolutePath)
+    val cloneParent: StateFlow<String> = _cloneParent.asStateFlow()
+
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
@@ -108,6 +115,7 @@ class SidecarTabViewModel(
         scope.launch(Dispatchers.IO) {
             _target.value?.let { target ->
                 _repoPath.value = services.evolveLauncher.resolveSourceRepo(target)?.absolutePath
+                if (_cloneUrl.value.isBlank()) _cloneUrl.value = services.evolveLauncher.guessGitUrl(target)
             }
         }
     }
@@ -191,6 +199,51 @@ class SidecarTabViewModel(
 
     fun setTask(value: String) {
         _task.value = value
+    }
+
+    fun setCloneUrl(value: String) {
+        _cloneUrl.value = value
+    }
+
+    fun setCloneParent(value: String) {
+        _cloneParent.value = value
+    }
+
+    fun browseCloneParent() {
+        val picker = services.context.directoryPickerProvider ?: run {
+            appendAction("Directory picker unavailable — type the location instead")
+            return
+        }
+        picker.pickDirectory { path -> if (path != null) setCloneParent(path) }
+    }
+
+    /** Clone the plugin's repo into the chosen parent dir, then use it as the source. */
+    fun cloneRepo() {
+        if (_busy.value) return
+        val target = _target.value ?: run {
+            appendAction("Plugin is not loaded — cannot clone")
+            return
+        }
+        val url = _cloneUrl.value.ifBlank { services.evolveLauncher.guessGitUrl(target) }
+        val parent = File(_cloneParent.value)
+        _busy.value = true
+        scope.launch(Dispatchers.IO) {
+            try {
+                services.evolveLauncher.cloneRepo(target, url, parent, ::appendAction).fold(
+                    onSuccess = { dir ->
+                        _repoPath.value = dir.absolutePath
+                        appendAction("Cloned into ${dir.absolutePath}")
+                        services.toastSuccess("Cloned ${target.displayName} for evolution")
+                    },
+                    onFailure = {
+                        appendAction("Clone failed: ${it.message}")
+                        services.toastError(it.message ?: "Clone failed")
+                    },
+                )
+            } finally {
+                _busy.value = false
+            }
+        }
     }
 
     fun launchEvolve(agent: CliAgent) {

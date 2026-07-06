@@ -24,6 +24,7 @@ import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Card
 import androidx.compose.material.CircularProgressIndicator
+import androidx.compose.material.Divider
 import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedButton
@@ -301,6 +302,8 @@ internal fun EvolveSection(viewModel: SidecarTabViewModel) {
     val task by viewModel.task.collectAsState()
     val busy by viewModel.busy.collectAsState()
     val actionLog by viewModel.actionLog.collectAsState()
+    val cloneUrl by viewModel.cloneUrl.collectAsState()
+    val cloneParent by viewModel.cloneParent.collectAsState()
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
@@ -321,6 +324,48 @@ internal fun EvolveSection(viewModel: SidecarTabViewModel) {
                         Text("Browse", fontSize = 11.sp)
                     }
                 }
+
+                // No local checkout found — offer to clone it (into the plugins
+                // umbrella by default), the same acquisition step tool-creator does.
+                if (repoPath == null) {
+                    Divider(color = MaterialTheme.colors.onSurface.copy(alpha = 0.08f))
+                    Text(
+                        "No local checkout found — clone it to evolve:",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.55f),
+                    )
+                    OutlinedTextField(
+                        value = cloneUrl,
+                        onValueChange = viewModel::setCloneUrl,
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        textStyle = TextStyle(fontSize = 11.sp, fontFamily = FontFamily.Monospace),
+                        placeholder = { Text("git URL…", fontSize = 11.sp) },
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = cloneParent,
+                            onValueChange = viewModel::setCloneParent,
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            textStyle = TextStyle(fontSize = 11.sp, fontFamily = FontFamily.Monospace),
+                            placeholder = { Text("Clone into…", fontSize = 11.sp) },
+                        )
+                        OutlinedButton(onClick = { viewModel.browseCloneParent() }) {
+                            Icon(Icons.Default.Folder, null, Modifier.size(14.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Browse", fontSize = 11.sp)
+                        }
+                        Button(
+                            onClick = { viewModel.cloneRepo() },
+                            enabled = !busy && cloneUrl.isNotBlank(),
+                            colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary),
+                        ) {
+                            Text("Clone", fontSize = 11.sp)
+                        }
+                    }
+                }
+
                 OutlinedTextField(
                     value = task,
                     onValueChange = viewModel::setTask,

@@ -66,7 +66,7 @@ class ToolSidecarMcpToolProvider(
         ),
         McpToolDefinition(
             name = "sidecar_evolve",
-            description = "Start evolving a plugin with an AI CLI: writes the sidecar-evolve skill (with plugin context) into the plugin's source repo and opens a BossTerm tab there running the CLI. Agents: claude, codex, gemini, opencode.",
+            description = "Start evolving a plugin with an AI CLI: writes the sidecar-evolve skill (with plugin context) into the plugin's source repo and opens a BossTerm tab there running the CLI. If no local checkout is found it clones the repo into the plugins umbrella first. Agents: claude, codex, gemini, opencode.",
             inputSchema = """{"type":"object","properties":{
                 "plugin_id":{"type":"string","description":"Plugin id to evolve"},
                 "agent":{"type":"string","enum":["claude","codex","gemini","opencode"],"description":"AI CLI to launch (default claude)"},
@@ -177,11 +177,21 @@ class ToolSidecarMcpToolProvider(
         val target = services.findTool(pluginId)
             ?: return McpToolResult("No loaded plugin with id $pluginId", isError = true)
         val agent = CliAgent.fromId(agentId) ?: CliAgent.CLAUDE_CODE
-        val repo = repoPath?.let { File(it) } ?: services.evolveLauncher.resolveSourceRepo(target)
-            ?: return McpToolResult(
-                "No source repo found for $pluginId — pass repo_path (searched ~/Development/Boss/boss_plugins, ~/BossTools, ~/Development)",
-                isError = true,
-            )
+        val repo = repoPath?.let { File(it) }
+            ?: services.evolveLauncher.resolveSourceRepo(target)
+            ?: run {
+                // No local checkout — clone it (like tool-creator's acquisition step)
+                // into the plugins umbrella so evolution has a working tree.
+                val url = services.evolveLauncher.guessGitUrl(target)
+                val parent = services.evolveLauncher.defaultCloneParent()
+                services.evolveLauncher.cloneRepo(target, url, parent) { }.getOrElse {
+                    return McpToolResult(
+                        "No source repo for $pluginId and clone failed (${it.message}). " +
+                            "Pass repo_path, or check the repo URL ($url).",
+                        isError = true,
+                    )
+                }
+            }
         return services.evolveLauncher.launchEvolve(target, agent, repo, task).fold(
             onSuccess = { McpToolResult(it) },
             onFailure = { McpToolResult(it.message ?: "Evolve launch failed", isError = true) },
