@@ -16,7 +16,7 @@ class ToolEvolverDynamicPlugin : DynamicPlugin {
 
     override val pluginId = EvolverServices.SELF_PLUGIN_ID
     override val displayName = "Tool Evolver"
-    override val version = "0.2.0"
+    override val version = "0.3.0"
     override val description =
         "Probe installed tools (memory, leak signals, logs) and evolve them with Claude Code, Codex, Gemini, or OpenCode — hot reload + PR included"
     override val author = "Risa Labs"

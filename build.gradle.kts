@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "ai.rever.boss.plugin.dynamic"
-version = "0.2.0"
+version = "0.3.0"
 
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(17)) } }
 kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
@@ -25,7 +25,7 @@ repositories {
 dependencies {
     if (useLocalDependencies) {
         // Local dev: boss-plugin-api JAR from sibling repo (pinned version)
-        compileOnly(files("$bossPluginApiPath/build/libs/boss-plugin-api-1.0.59.jar"))
+        compileOnly(files("$bossPluginApiPath/build/libs/boss-plugin-api-1.0.60.jar"))
     } else {
         // CI: downloaded JAR
         compileOnly(files("build/downloaded-deps/boss-plugin-api.jar"))

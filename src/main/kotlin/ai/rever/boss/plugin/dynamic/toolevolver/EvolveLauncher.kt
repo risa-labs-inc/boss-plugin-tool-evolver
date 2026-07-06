@@ -1,10 +1,23 @@
 package ai.rever.boss.plugin.dynamic.toolevolver
 
 import ai.rever.boss.plugin.api.LoadedPluginInfo
+import ai.rever.boss.plugin.api.TabSplitMode
 import ai.rever.boss.plugin.tab.terminal.TerminalTabInfo
 import ai.rever.boss.plugin.tab.terminal.TerminalTabType
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+
+/**
+ * Where the evolve terminal opens — the "new tab vs split" choice, mirroring the
+ * host's terminal-link chooser. Splits use [TabSplitMode] via
+ * [ai.rever.boss.plugin.api.SplitViewOperations.openTabInSplit]; NEW_TAB uses openTab.
+ */
+enum class EvolveOpenLocation(val label: String) {
+    NEW_TAB("new tab"),
+    EXISTING_SPLIT("existing split"),
+    SPLIT_RIGHT("split right"),
+    SPLIT_DOWN("split down"),
+}
 
 /**
  * Starts an "evolution" of an installed plugin: writes the evolve skill
@@ -125,21 +138,26 @@ class EvolveLauncher(private val services: EvolverServices) {
         agent: CliAgent,
         repoDir: File,
         task: String? = null,
+        location: EvolveOpenLocation = EvolveOpenLocation.NEW_TAB,
     ): Result<String> = runCatching {
         require(repoDir.isDirectory) { "Source repo not found: ${repoDir.absolutePath}" }
         writeSkills(info, repoDir)
         val ops = services.context.splitViewOperations
             ?: error("Terminal unavailable — run manually: cd ${repoDir.absolutePath} && ${agent.launchCommand(task)}")
-        ops.openTab(
-            TerminalTabInfo(
-                id = "evolve-${info.pluginId}-${System.currentTimeMillis()}",
-                typeId = TerminalTabType.typeId,
-                title = "Evolve: ${info.displayName}",
-                initialCommand = agent.launchCommand(task),
-                workingDirectory = repoDir.absolutePath,
-            )
+        val tabInfo = TerminalTabInfo(
+            id = "evolve-${info.pluginId}-${System.currentTimeMillis()}",
+            typeId = TerminalTabType.typeId,
+            title = "Evolve: ${info.displayName}",
+            initialCommand = agent.launchCommand(task),
+            workingDirectory = repoDir.absolutePath,
         )
-        "Opened ${agent.displayName} on ${repoDir.absolutePath}"
+        when (location) {
+            EvolveOpenLocation.NEW_TAB -> ops.openTab(tabInfo)
+            EvolveOpenLocation.EXISTING_SPLIT -> ops.openTabInSplit(tabInfo, TabSplitMode.EXISTING_SPLIT)
+            EvolveOpenLocation.SPLIT_RIGHT -> ops.openTabInSplit(tabInfo, TabSplitMode.VERTICAL_SPLIT)
+            EvolveOpenLocation.SPLIT_DOWN -> ops.openTabInSplit(tabInfo, TabSplitMode.HORIZONTAL_SPLIT)
+        }
+        "Opened ${agent.displayName} on ${repoDir.absolutePath} (${location.label})"
     }
 
     /**

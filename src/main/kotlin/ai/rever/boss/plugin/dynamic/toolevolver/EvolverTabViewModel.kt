@@ -1,6 +1,7 @@
 package ai.rever.boss.plugin.dynamic.toolevolver
 
 import ai.rever.boss.plugin.api.ConsoleLogsAPI
+import ai.rever.boss.plugin.api.DialogChoice
 import ai.rever.boss.plugin.api.LoadedPluginInfo
 import ai.rever.boss.plugin.api.LogEntryData
 import ai.rever.boss.plugin.api.PanelId
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * State for one evolver tab, bound to a single target plugin. Probe state
@@ -255,17 +257,47 @@ class EvolverTabViewModel(
             appendAction("No source repo — set one (searched the workspace roots without a match)")
             return
         }
-        scope.launch(Dispatchers.IO) {
-            services.evolveLauncher.launchEvolve(target, agent, repo, _task.value.ifBlank { null }).fold(
-                onSuccess = {
-                    appendAction(it)
-                    services.toastSuccess("${agent.displayName} is evolving ${target.displayName}")
-                },
-                onFailure = {
-                    appendAction("Evolve failed: ${it.message}")
-                    services.toastError(it.message ?: "Evolve failed")
-                },
-            )
+        scope.launch {
+            // Ask where to open — new tab vs split — like the terminal-link chooser.
+            val location = chooseOpenLocation(agent) ?: return@launch  // null = cancelled
+            withContext(Dispatchers.IO) {
+                services.evolveLauncher.launchEvolve(target, agent, repo, _task.value.ifBlank { null }, location).fold(
+                    onSuccess = {
+                        appendAction(it)
+                        services.toastSuccess("${agent.displayName} is evolving ${target.displayName}")
+                    },
+                    onFailure = {
+                        appendAction("Evolve failed: ${it.message}")
+                        services.toastError(it.message ?: "Evolve failed")
+                    },
+                )
+            }
+        }
+    }
+
+    /**
+     * Prompt for where to open the evolve terminal (host-native choice dialog),
+     * mirroring the terminal-link chooser. Returns null if the user cancels;
+     * defaults to a new tab when no dialog provider is available.
+     */
+    private suspend fun chooseOpenLocation(agent: CliAgent): EvolveOpenLocation? {
+        val dialogs = services.context.genericDialogProvider ?: return EvolveOpenLocation.NEW_TAB
+        val choice = dialogs.showChoiceDialog(
+            title = "Open ${agent.displayName}",
+            message = "Where should the evolve terminal open?",
+            choices = listOf(
+                DialogChoice("new_tab", "New tab", "Open in a new tab in the active panel"),
+                DialogChoice("existing", "Existing split", "Reuse the other open split pane"),
+                DialogChoice("vsplit", "Split right", "New split beside the current tab"),
+                DialogChoice("hsplit", "Split down", "New split below the current tab"),
+            ),
+            selectedIndex = 0,
+        ) ?: return null
+        return when (choice.id) {
+            "existing" -> EvolveOpenLocation.EXISTING_SPLIT
+            "vsplit" -> EvolveOpenLocation.SPLIT_RIGHT
+            "hsplit" -> EvolveOpenLocation.SPLIT_DOWN
+            else -> EvolveOpenLocation.NEW_TAB
         }
     }
 
