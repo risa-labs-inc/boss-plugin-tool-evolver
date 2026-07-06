@@ -236,6 +236,12 @@ private fun LogsCard(viewModel: SidecarTabViewModel, modifier: Modifier = Modifi
                     fontSize = 10.sp,
                     color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f),
                 )
+                if (viewModel.canOpenInConsole) {
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedButton(onClick = { viewModel.openInConsole() }) {
+                        Text("Open in Console", fontSize = 10.sp)
+                    }
+                }
             }
             Spacer(Modifier.height(6.dp))
             OutlinedTextField(

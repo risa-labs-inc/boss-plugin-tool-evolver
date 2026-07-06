@@ -16,7 +16,7 @@ class ToolSidecarDynamicPlugin : DynamicPlugin {
 
     override val pluginId = SidecarServices.SELF_PLUGIN_ID
     override val displayName = "Tool Sidecar"
-    override val version = "0.1.0"
+    override val version = "0.2.0"
     override val description =
         "Probe installed tools (memory, leak signals, logs) and evolve them with Claude Code, Codex, Gemini, or OpenCode — hot reload + PR included"
     override val author = "Risa Labs"

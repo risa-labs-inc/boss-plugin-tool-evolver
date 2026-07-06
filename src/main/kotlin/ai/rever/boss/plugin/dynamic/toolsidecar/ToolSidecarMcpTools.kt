@@ -1,9 +1,11 @@
 package ai.rever.boss.plugin.dynamic.toolsidecar
 
+import ai.rever.boss.plugin.api.ConsoleLogsAPI
 import ai.rever.boss.plugin.api.McpToolDefinition
 import ai.rever.boss.plugin.api.McpToolHandler
 import ai.rever.boss.plugin.api.McpToolProvider
 import ai.rever.boss.plugin.api.McpToolResult
+import ai.rever.boss.plugin.api.PluginLogMatcher
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -159,15 +161,14 @@ class ToolSidecarMcpToolProvider(
     }
 
     private fun recentLogsFor(displayName: String?, pluginId: String, limit: Int): List<String> {
-        val entries = services.context.logDataProvider?.logs?.value ?: return emptyList()
-        val keywords = buildList {
-            add(pluginId)
-            add(pluginId.substringAfterLast('.'))
-            displayName?.takeIf { it.isNotBlank() }?.let { add(it) }
-        }.map { it.lowercase() }.distinct()
-        return entries.asSequence()
-            .filter { e -> keywords.any { e.message.lowercase().contains(it) } }
-            .toList()
+        // Prefer the Console plugin's shared attribution flow; same PluginLogMatcher
+        // heuristic applies directly when the console is absent.
+        val entries = services.context.getPluginAPI(ConsoleLogsAPI::class.java)
+            ?.logsForPlugin(pluginId, displayName)?.value
+            ?: services.context.logDataProvider?.logs?.value
+                ?.let { PluginLogMatcher.filter(it, pluginId, displayName) }
+            ?: return emptyList()
+        return entries
             .takeLast(limit.coerceIn(1, 200))
             .map { "${it.formatTimestamp()} ${it.message.take(400)}" }
     }

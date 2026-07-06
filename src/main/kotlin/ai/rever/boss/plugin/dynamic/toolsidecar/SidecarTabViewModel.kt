@@ -1,7 +1,10 @@
 package ai.rever.boss.plugin.dynamic.toolsidecar
 
+import ai.rever.boss.plugin.api.ConsoleLogsAPI
 import ai.rever.boss.plugin.api.LoadedPluginInfo
 import ai.rever.boss.plugin.api.LogEntryData
+import ai.rever.boss.plugin.api.PanelId
+import ai.rever.boss.plugin.api.PluginLogMatcher
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -12,6 +15,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -54,12 +58,33 @@ class SidecarTabViewModel(
     private val _logQuery = MutableStateFlow("")
     val logQuery: StateFlow<String> = _logQuery.asStateFlow()
 
+    private val consoleLogs: ConsoleLogsAPI? =
+        services.context.getPluginAPI(ConsoleLogsAPI::class.java)
+
+    /**
+     * Lines attributed to the target plugin. Preferably the Console plugin's
+     * shared flow (one attribution implementation app-wide); when the Console
+     * plugin is absent, the same [PluginLogMatcher] heuristic is applied to the
+     * host's raw log stream directly.
+     */
+    private val attributedLogs: StateFlow<List<LogEntryData>> =
+        consoleLogs?.logsForPlugin(targetPluginId, tabInfo.targetDisplayName)
+            ?: (services.context.logDataProvider?.logs ?: MutableStateFlow(emptyList()))
+                .map { PluginLogMatcher.filter(it, targetPluginId, tabInfo.targetDisplayName) }
+                .stateIn(scope, SharingStarted.Eagerly, emptyList())
+
     val logs: StateFlow<List<LogEntryData>> = combine(
-        services.context.logDataProvider?.logs ?: MutableStateFlow(emptyList()),
+        attributedLogs,
         _logQuery,
-        _target,
-    ) { entries, query, target -> filterLogs(entries, query, target) }
-        .stateIn(scope, SharingStarted.Eagerly, emptyList())
+    ) { entries, query ->
+        val matched =
+            if (query.isBlank()) entries
+            else entries.filter { it.message.contains(query, ignoreCase = true) }
+        matched.takeLast(400)
+    }.stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    /** True when the Console plugin is present, enabling "Open in Console". */
+    val canOpenInConsole: Boolean = consoleLogs != null
 
     // ----------------------------------------------------------------- evolve
 
@@ -225,24 +250,27 @@ class SidecarTabViewModel(
         _actionLog.update { (it + line).takeLast(400) }
     }
 
-    private fun filterLogs(
-        entries: List<LogEntryData>,
-        query: String,
-        target: LoadedPluginInfo?,
-    ): List<LogEntryData> {
-        val keywords = buildList {
-            add(targetPluginId)
-            add(targetPluginId.substringAfterLast('.'))
-            target?.displayName?.takeIf { it.isNotBlank() }?.let { add(it) }
-        }.map { it.lowercase() }.distinct()
-        return entries.asSequence()
-            .filter { e ->
-                val line = e.message.lowercase()
-                keywords.any { line.contains(it) } &&
-                    (query.isBlank() || line.contains(query.lowercase()))
-            }
-            .toList()
-            .takeLast(400)
+    /**
+     * Select this plugin in the Console panel's filter and reveal the panel —
+     * the console owns the full log-viewing experience; the sidecar's list is a
+     * probe-sized excerpt.
+     */
+    fun openInConsole() {
+        val api = consoleLogs ?: run {
+            appendAction("Console plugin not installed — cannot open")
+            return
+        }
+        api.setPluginFilter(targetPluginId)
+        val windowId = services.context.windowId
+        val panelEvents = services.context.panelEventProvider
+        if (windowId == null || panelEvents == null) {
+            appendAction("Console filter set to $targetPluginId (open the Console panel to view)")
+            return
+        }
+        scope.launch {
+            // Matched host-side by panelId string + pluginId; order is not compared.
+            panelEvents.openPanel(PanelId("console", 0), windowId)
+        }
     }
 
     fun dispose() {
