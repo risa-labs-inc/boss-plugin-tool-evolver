@@ -12,6 +12,11 @@ import kotlinx.coroutines.withContext
  * MCP tools (`mcp__boss__sidecar_*`) exposing the sidecar to in-terminal agents.
  * `sidecar_hot_reload` is the tool the evolve skill calls after a rebuild to
  * live-swap the plugin in the running host.
+ *
+ * CONTRACT: `sidecar_open` and its `plugin_id` argument are mirrored by
+ * BossConsole's `SidecarContract` (SidePanel's "Open Sidecar" ⋮ menu item is
+ * gated on the tool name and dispatches through it). Renaming either silently
+ * removes that menu item — update the host constants in the same change.
  */
 class ToolSidecarMcpToolProvider(
     override val providerId: String,
