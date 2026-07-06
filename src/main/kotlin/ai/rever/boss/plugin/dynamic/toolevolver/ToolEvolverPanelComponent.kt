@@ -1,4 +1,4 @@
-package ai.rever.boss.plugin.dynamic.toolsidecar
+package ai.rever.boss.plugin.dynamic.toolevolver
 
 import ai.rever.boss.plugin.api.LoadedPluginInfo
 import ai.rever.boss.plugin.api.PanelComponentWithUI
@@ -54,7 +54,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-class ToolSidecarPanelViewModel(private val services: SidecarServices) {
+class ToolEvolverPanelViewModel(private val services: EvolverServices) {
 
     private val _tools = MutableStateFlow<List<LoadedPluginInfo>>(emptyList())
     val tools: StateFlow<List<LoadedPluginInfo>> = _tools.asStateFlow()
@@ -83,29 +83,29 @@ class ToolSidecarPanelViewModel(private val services: SidecarServices) {
         _search.value = value
     }
 
-    fun openSidecar(info: LoadedPluginInfo) {
-        if (services.openSidecarTab(info)) _showPicker.value = false
+    fun openEvolver(info: LoadedPluginInfo) {
+        if (services.openEvolverTab(info)) _showPicker.value = false
     }
 }
 
-class ToolSidecarPanelComponent(
+class ToolEvolverPanelComponent(
     ctx: ComponentContext,
     override val panelInfo: PanelInfo,
-    services: SidecarServices,
+    services: EvolverServices,
 ) : PanelComponentWithUI, ComponentContext by ctx {
 
-    private val viewModel = ToolSidecarPanelViewModel(services)
+    private val viewModel = ToolEvolverPanelViewModel(services)
 
     @Composable
     override fun Content() {
         BossTheme {
-            ToolSidecarPanelContent(viewModel)
+            ToolEvolverPanelContent(viewModel)
         }
     }
 }
 
 @Composable
-private fun ToolSidecarPanelContent(viewModel: ToolSidecarPanelViewModel) {
+private fun ToolEvolverPanelContent(viewModel: ToolEvolverPanelViewModel) {
     val tools by viewModel.tools.collectAsState()
     val showPicker by viewModel.showPicker.collectAsState()
 
@@ -126,7 +126,7 @@ private fun ToolSidecarPanelContent(viewModel: ToolSidecarPanelViewModel) {
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {
                     items(tools, key = { it.pluginId }) { tool ->
-                        ToolRow(tool, onClick = { viewModel.openSidecar(tool) })
+                        ToolRow(tool, onClick = { viewModel.openEvolver(tool) })
                     }
                 }
             }
@@ -138,14 +138,14 @@ private fun ToolSidecarPanelContent(viewModel: ToolSidecarPanelViewModel) {
 }
 
 @Composable
-private fun PanelHeader(viewModel: ToolSidecarPanelViewModel) {
+private fun PanelHeader(viewModel: ToolEvolverPanelViewModel) {
     var menuOpen by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            "Tool Sidecar",
+            "Tool Evolver",
             fontWeight = FontWeight.SemiBold,
             fontSize = 13.sp,
             color = MaterialTheme.colors.onBackground,
@@ -170,7 +170,7 @@ private fun PanelHeader(viewModel: ToolSidecarPanelViewModel) {
                 DropdownMenuItem(onClick = {
                     menuOpen = false
                     viewModel.openPicker()
-                }) { Text("Open Sidecar…", fontSize = 12.sp) }
+                }) { Text("Open Evolver…", fontSize = 12.sp) }
                 DropdownMenuItem(onClick = {
                     menuOpen = false
                     viewModel.refresh()
@@ -217,7 +217,7 @@ private fun ToolRow(tool: LoadedPluginInfo, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ToolPickerOverlay(viewModel: ToolSidecarPanelViewModel) {
+private fun ToolPickerOverlay(viewModel: ToolEvolverPanelViewModel) {
     val tools by viewModel.tools.collectAsState()
     val search by viewModel.search.collectAsState()
     val filtered = remember(tools, search) {
@@ -242,7 +242,7 @@ private fun ToolPickerOverlay(viewModel: ToolSidecarPanelViewModel) {
         ) {
             Column(Modifier.padding(12.dp)) {
                 Text(
-                    "Open Sidecar for…",
+                    "Open Evolver for…",
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 13.sp,
                     color = MaterialTheme.colors.onSurface,
@@ -269,7 +269,7 @@ private fun ToolPickerOverlay(viewModel: ToolSidecarPanelViewModel) {
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     items(filtered, key = { it.pluginId }) { tool ->
-                        ToolRow(tool, onClick = { viewModel.openSidecar(tool) })
+                        ToolRow(tool, onClick = { viewModel.openEvolver(tool) })
                     }
                 }
             }

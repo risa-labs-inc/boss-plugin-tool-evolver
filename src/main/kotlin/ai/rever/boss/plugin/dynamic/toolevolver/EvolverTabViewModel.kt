@@ -1,4 +1,4 @@
-package ai.rever.boss.plugin.dynamic.toolsidecar
+package ai.rever.boss.plugin.dynamic.toolevolver
 
 import ai.rever.boss.plugin.api.ConsoleLogsAPI
 import ai.rever.boss.plugin.api.LoadedPluginInfo
@@ -21,13 +21,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * State for one sidecar tab, bound to a single target plugin. Probe state
+ * State for one evolver tab, bound to a single target plugin. Probe state
  * (memory samples, leak signals, filtered logs) and Evolve state (repo, agent,
  * action log) live here.
  */
-class SidecarTabViewModel(
-    private val services: SidecarServices,
-    val tabInfo: SidecarTabInfo,
+class EvolverTabViewModel(
+    private val services: EvolverServices,
+    val tabInfo: EvolverTabInfo,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val targetPluginId = tabInfo.targetPluginId
@@ -39,7 +39,7 @@ class SidecarTabViewModel(
     val isLoaded: StateFlow<Boolean> = _isLoaded.asStateFlow()
 
     private val _section = MutableStateFlow(tabInfo.initialSection)
-    val section: StateFlow<SidecarSection> = _section.asStateFlow()
+    val section: StateFlow<EvolverSection> = _section.asStateFlow()
 
     // ------------------------------------------------------------------ probe
 
@@ -120,7 +120,7 @@ class SidecarTabViewModel(
         }
     }
 
-    fun setSection(section: SidecarSection) {
+    fun setSection(section: EvolverSection) {
         _section.value = section
     }
 
@@ -305,7 +305,7 @@ class SidecarTabViewModel(
 
     /**
      * Select this plugin in the Console panel's filter and reveal the panel —
-     * the console owns the full log-viewing experience; the sidecar's list is a
+     * the console owns the full log-viewing experience; the evolver's list is a
      * probe-sized excerpt.
      */
     fun openInConsole() {

@@ -1,4 +1,4 @@
-package ai.rever.boss.plugin.dynamic.toolsidecar
+package ai.rever.boss.plugin.dynamic.toolevolver
 
 import ai.rever.boss.plugin.api.TabComponentWithUI
 import ai.rever.boss.plugin.api.TabInfo
@@ -30,18 +30,18 @@ import androidx.compose.ui.unit.sp
 import com.arkivanov.decompose.ComponentContext
 import com.arkivanov.essenty.lifecycle.doOnDestroy
 
-class SidecarTabComponent(
+class EvolverTabComponent(
     ctx: ComponentContext,
     override val config: TabInfo,
-    services: SidecarServices,
+    services: EvolverServices,
 ) : TabComponentWithUI, ComponentContext by ctx {
 
-    override val tabTypeInfo: TabTypeInfo = SidecarTabType
+    override val tabTypeInfo: TabTypeInfo = EvolverTabType
 
-    private val viewModel = SidecarTabViewModel(
+    private val viewModel = EvolverTabViewModel(
         services = services,
-        tabInfo = config as? SidecarTabInfo
-            ?: SidecarTabInfo(targetPluginId = config.id.removePrefix("tool-sidecar-"), targetDisplayName = config.title),
+        tabInfo = config as? EvolverTabInfo
+            ?: EvolverTabInfo(targetPluginId = config.id.removePrefix("tool-evolver-"), targetDisplayName = config.title),
     )
 
     init {
@@ -51,13 +51,13 @@ class SidecarTabComponent(
     @Composable
     override fun Content() {
         BossTheme {
-            SidecarTabScreen(viewModel)
+            EvolverTabScreen(viewModel)
         }
     }
 }
 
 @Composable
-private fun SidecarTabScreen(viewModel: SidecarTabViewModel) {
+private fun EvolverTabScreen(viewModel: EvolverTabViewModel) {
     val target by viewModel.target.collectAsState()
     val isLoaded by viewModel.isLoaded.collectAsState()
     val section by viewModel.section.collectAsState()
@@ -100,13 +100,13 @@ private fun SidecarTabScreen(viewModel: SidecarTabViewModel) {
             backgroundColor = MaterialTheme.colors.background,
             contentColor = MaterialTheme.colors.primary,
         ) {
-            SidecarSection.entries.forEach { s ->
+            EvolverSection.entries.forEach { s ->
                 Tab(
                     selected = section == s,
                     onClick = { viewModel.setSection(s) },
                     text = {
                         Text(
-                            if (s == SidecarSection.PROBE) "Probe" else "Evolve",
+                            if (s == EvolverSection.PROBE) "Probe" else "Evolve",
                             fontSize = 12.sp,
                         )
                     },
@@ -115,8 +115,8 @@ private fun SidecarTabScreen(viewModel: SidecarTabViewModel) {
         }
         Divider(color = MaterialTheme.colors.onSurface.copy(alpha = 0.08f))
         when (section) {
-            SidecarSection.PROBE -> ProbeSection(viewModel)
-            SidecarSection.EVOLVE -> EvolveSection(viewModel)
+            EvolverSection.PROBE -> ProbeSection(viewModel)
+            EvolverSection.EVOLVE -> EvolveSection(viewModel)
         }
     }
 }

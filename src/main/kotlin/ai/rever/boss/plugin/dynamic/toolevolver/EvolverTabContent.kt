@@ -1,4 +1,4 @@
-package ai.rever.boss.plugin.dynamic.toolsidecar
+package ai.rever.boss.plugin.dynamic.toolevolver
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -74,7 +74,7 @@ internal fun StatusChip(enabled: Boolean, healthy: Boolean, loaded: Boolean) {
 // ---------------------------------------------------------------------- Probe
 
 @Composable
-internal fun ProbeSection(viewModel: SidecarTabViewModel) {
+internal fun ProbeSection(viewModel: EvolverTabViewModel) {
     val target by viewModel.target.collectAsState()
     val snapshots by viewModel.snapshots.collectAsState()
     val sampling by viewModel.sampling.collectAsState()
@@ -218,7 +218,7 @@ internal fun ProbeSection(viewModel: SidecarTabViewModel) {
 }
 
 @Composable
-private fun LogsCard(viewModel: SidecarTabViewModel, modifier: Modifier = Modifier) {
+private fun LogsCard(viewModel: EvolverTabViewModel, modifier: Modifier = Modifier) {
     val logs by viewModel.logs.collectAsState()
     val logQuery by viewModel.logQuery.collectAsState()
     val listState = rememberLazyListState()
@@ -297,7 +297,7 @@ private fun LogsCard(viewModel: SidecarTabViewModel, modifier: Modifier = Modifi
 // --------------------------------------------------------------------- Evolve
 
 @Composable
-internal fun EvolveSection(viewModel: SidecarTabViewModel) {
+internal fun EvolveSection(viewModel: EvolverTabViewModel) {
     val repoPath by viewModel.repoPath.collectAsState()
     val task by viewModel.task.collectAsState()
     val busy by viewModel.busy.collectAsState()
@@ -381,7 +381,7 @@ internal fun EvolveSection(viewModel: SidecarTabViewModel) {
             Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionTitle("Evolve with…")
                 Text(
-                    "Writes the sidecar-evolve skill (plugin context, hot-reload + PR workflow) into the repo and opens the agent in a BossTerm tab.",
+                    "Writes the evolve skill (plugin context, hot-reload + PR workflow) into the repo and opens the agent in a BossTerm tab.",
                     fontSize = 10.sp,
                     color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f),
                 )
@@ -408,7 +408,7 @@ internal fun EvolveSection(viewModel: SidecarTabViewModel) {
                     }
                     if (busy) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
                     Text(
-                        "The evolve agent normally does this itself via the sidecar_hot_reload MCP tool.",
+                        "The evolve agent normally does this itself via the evolver_hot_reload MCP tool.",
                         fontSize = 10.sp,
                         color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f),
                     )

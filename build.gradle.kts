@@ -46,13 +46,13 @@ dependencies {
 
 // Thin plugin JAR: compiled classes + manifest only (API and Compose come from the host)
 tasks.register<Jar>("buildPluginJar") {
-    archiveFileName.set("boss-plugin-tool-sidecar-${version}.jar")
+    archiveFileName.set("boss-plugin-tool-evolver-${version}.jar")
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     manifest {
         attributes(
-            "Implementation-Title" to "BOSS Tool Sidecar Plugin",
+            "Implementation-Title" to "BOSS Tool Evolver Plugin",
             "Implementation-Version" to version,
-            "Main-Class" to "ai.rever.boss.plugin.dynamic.toolsidecar.ToolSidecarDynamicPlugin"
+            "Main-Class" to "ai.rever.boss.plugin.dynamic.toolevolver.ToolEvolverDynamicPlugin"
         )
     }
     from(sourceSets.main.get().output)

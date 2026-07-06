@@ -1,4 +1,4 @@
-package ai.rever.boss.plugin.dynamic.toolsidecar
+package ai.rever.boss.plugin.dynamic.toolevolver
 
 import ai.rever.boss.plugin.api.ConsoleLogsAPI
 import ai.rever.boss.plugin.api.McpToolDefinition
@@ -11,30 +11,30 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * MCP tools (`mcp__boss__sidecar_*`) exposing the sidecar to in-terminal agents.
- * `sidecar_hot_reload` is the tool the evolve skill calls after a rebuild to
+ * MCP tools (`mcp__boss__evolver_*`) exposing the evolver to in-terminal agents.
+ * `evolver_hot_reload` is the tool the evolve skill calls after a rebuild to
  * live-swap the plugin in the running host.
  *
- * CONTRACT: `sidecar_open` and its `plugin_id` argument are mirrored by
- * BossConsole's `SidecarContract` (SidePanel's "Open Sidecar" ⋮ menu item is
+ * CONTRACT: `evolver_open` and its `plugin_id` argument are mirrored by
+ * BossConsole's `EvolverContract` (SidePanel's "Open Evolver" ⋮ menu item is
  * gated on the tool name and dispatches through it). Renaming either silently
  * removes that menu item — update the host constants in the same change.
  */
-class ToolSidecarMcpToolProvider(
+class ToolEvolverMcpToolProvider(
     override val providerId: String,
-    private val services: SidecarServices,
+    private val services: EvolverServices,
 ) : McpToolProvider {
 
     override fun tools(): List<McpToolDefinition> = listOf(
         McpToolDefinition(
-            name = "sidecar_list_tools",
+            name = "evolver_list_tools",
             description = "List installed BOSS tools (plugins) with id, version, enabled/health state, jar path, open instance count, and the local source repo when one is found.",
             handler = McpToolHandler { _ ->
                 withContext(Dispatchers.IO) { listTools() }
             },
         ),
         McpToolDefinition(
-            name = "sidecar_probe",
+            name = "evolver_probe",
             description = "Probe one installed plugin: metadata, per-plugin heap footprint (live-object histogram filtered to the plugin's package — forces a GC), leak signals, and recent log lines mentioning the plugin.",
             inputSchema = """{"type":"object","properties":{
                 "plugin_id":{"type":"string","description":"Plugin id, e.g. ai.rever.boss.plugin.dynamic.bookmarks"},
@@ -47,11 +47,11 @@ class ToolSidecarMcpToolProvider(
             },
         ),
         McpToolDefinition(
-            name = "sidecar_open",
-            description = "Open the Tool Sidecar tab for a plugin in the main panel (sections: probe, evolve).",
+            name = "evolver_open",
+            description = "Open the Tool Evolver tab for a plugin in the main panel (sections: probe, evolve).",
             inputSchema = """{"type":"object","properties":{
-                "plugin_id":{"type":"string","description":"Plugin id to open the sidecar for"},
-                "section":{"type":"string","enum":["probe","evolve"],"description":"Section to open (default probe)"}
+                "plugin_id":{"type":"string","description":"Plugin id to open the evolver for"},
+                "section":{"type":"string","enum":["probe","evolve"],"description":"Section to open (default evolve)"}
             },"required":["plugin_id"]}""".trimIndent(),
             readOnly = false,
             handler = McpToolHandler { args ->
@@ -59,14 +59,14 @@ class ToolSidecarMcpToolProvider(
                     ?: return@McpToolHandler McpToolResult("Missing required argument: plugin_id", isError = true)
                 val target = services.findTool(pluginId)
                     ?: return@McpToolHandler McpToolResult("No loaded plugin with id $pluginId", isError = true)
-                val section = if (args.string("section")?.lowercase() == "evolve") SidecarSection.EVOLVE else SidecarSection.PROBE
-                if (services.openSidecarTab(target, section)) McpToolResult("Opened sidecar for ${target.displayName} (${section.name.lowercase()})")
+                val section = if (args.string("section")?.lowercase() == "probe") EvolverSection.PROBE else EvolverSection.EVOLVE
+                if (services.openEvolverTab(target, section)) McpToolResult("Opened evolver for ${target.displayName} (${section.name.lowercase()})")
                 else McpToolResult("Host does not expose split view operations", isError = true)
             },
         ),
         McpToolDefinition(
-            name = "sidecar_evolve",
-            description = "Start evolving a plugin with an AI CLI: writes the sidecar-evolve skill (with plugin context) into the plugin's source repo and opens a BossTerm tab there running the CLI. If no local checkout is found it clones the repo into the plugins umbrella first. Agents: claude, codex, gemini, opencode.",
+            name = "evolver_evolve",
+            description = "Start evolving a plugin with an AI CLI: writes the evolve skill (with plugin context) into the plugin's source repo and opens a BossTerm tab there running the CLI. If no local checkout is found it clones the repo into the plugins umbrella first. Agents: claude, codex, gemini, opencode.",
             inputSchema = """{"type":"object","properties":{
                 "plugin_id":{"type":"string","description":"Plugin id to evolve"},
                 "agent":{"type":"string","enum":["claude","codex","gemini","opencode"],"description":"AI CLI to launch (default claude)"},
@@ -81,7 +81,7 @@ class ToolSidecarMcpToolProvider(
             },
         ),
         McpToolDefinition(
-            name = "sidecar_hot_reload",
+            name = "evolver_hot_reload",
             description = "Hot-reload a plugin in the RUNNING BOSS instance. With jar_path: copies the jar into the live plugins directory (installed host: ~/.boss/plugins, dev host: ~/.boss_debug/plugins) and live-loads it. Without jar_path: reloads the plugin in place. Call this after `./gradlew buildPluginJar` to apply an evolution.",
             inputSchema = """{"type":"object","properties":{
                 "plugin_id":{"type":"string","description":"Plugin id to reload"},
@@ -124,7 +124,7 @@ class ToolSidecarMcpToolProvider(
         val loader = services.loader
         val isLoaded = loader?.isPluginLoaded(pluginId) ?: false
         if (target == null && !isLoaded) {
-            return McpToolResult("No loaded plugin with id $pluginId (use sidecar_list_tools)", isError = true)
+            return McpToolResult("No loaded plugin with id $pluginId (use evolver_list_tools)", isError = true)
         }
         val prefix = target?.let { services.memoryProbe.packagePrefixFor(it) } ?: pluginId
         val snapshot = services.memoryProbe.snapshot(prefix)

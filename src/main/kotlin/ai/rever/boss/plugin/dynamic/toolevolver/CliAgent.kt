@@ -1,11 +1,11 @@
-package ai.rever.boss.plugin.dynamic.toolsidecar
+package ai.rever.boss.plugin.dynamic.toolevolver
 
 import java.io.File
 
 /**
- * AI coding CLIs the Tool Sidecar can hand an existing plugin repo to for evolution.
+ * AI coding CLIs the Tool Evolver can hand an existing plugin repo to for evolution.
  *
- * Each agent gets the sidecar-evolve skill written into the plugin's repo in its
+ * Each agent gets the evolve skill written into the plugin's repo in its
  * own native format, and is launched in a new BossTerm tab with a kick-off prompt
  * that engages that skill.
  */
@@ -20,7 +20,7 @@ enum class CliAgent(
 
     /**
      * Shell command that opens the CLI inside the plugin repo with the
-     * sidecar-evolve skill already engaged. Kept apostrophe- and quote-free so it
+     * evolve skill already engaged. Kept apostrophe- and quote-free so it
      * survives shell quoting untouched.
      */
     fun launchCommand(task: String? = null): String {
@@ -28,14 +28,14 @@ enum class CliAgent(
         val suffix = if (ask.isEmpty()) "" else " Requested evolution: $ask"
         return when (this) {
             CLAUDE_CODE ->
-                if (ask.isEmpty()) "claude \"/sidecar-evolve\""
-                else "claude \"/sidecar-evolve $ask\""
+                if (ask.isEmpty()) "claude \"/evolve\""
+                else "claude \"/evolve $ask\""
             CODEX ->
-                "codex \"Load the sidecar-evolve skill in .codex/skills/sidecar-evolve/SKILL.md and follow it to evolve this plugin.$suffix\""
+                "codex \"Load the evolve skill in .codex/skills/evolve/SKILL.md and follow it to evolve this plugin.$suffix\""
             GEMINI ->
-                "gemini -i \"Read .claude/skills/sidecar-evolve/SKILL.md and follow it to evolve this plugin.$suffix\""
+                "gemini -i \"Read .claude/skills/evolve/SKILL.md and follow it to evolve this plugin.$suffix\""
             OPENCODE ->
-                "opencode --prompt \"Follow the sidecar-evolve command in .opencode/command/sidecar-evolve.md to evolve this plugin.$suffix\""
+                "opencode --prompt \"Follow the evolve command in .opencode/command/evolve.md to evolve this plugin.$suffix\""
         }
     }
 

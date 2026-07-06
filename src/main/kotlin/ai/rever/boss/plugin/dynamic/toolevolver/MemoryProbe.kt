@@ -1,4 +1,4 @@
-package ai.rever.boss.plugin.dynamic.toolsidecar
+package ai.rever.boss.plugin.dynamic.toolevolver
 
 import ai.rever.boss.plugin.api.LoadedPluginInfo
 import java.io.File

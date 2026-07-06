@@ -1,4 +1,4 @@
-rootProject.name = "boss-plugin-tool-sidecar"
+rootProject.name = "boss-plugin-tool-evolver"
 
 pluginManagement {
     repositories {

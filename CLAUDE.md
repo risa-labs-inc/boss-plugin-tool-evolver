@@ -2,12 +2,12 @@
 
 ## Project Overview
 
-**Tool Sidecar** (`ai.rever.boss.plugin.dynamic.toolsidecar`) is a dynamic plugin for the BOSS desktop application.
+**Tool Evolver** (`ai.rever.boss.plugin.dynamic.toolevolver`) is a dynamic plugin for the BOSS desktop application.
 
 Probe and evolve installed tools (plugins): per-plugin memory footprint + leak signals + logs, and AI-driven evolution with Claude Code, Codex, Gemini, or OpenCode — including live hot reload and PR creation.
 
-- **Plugin ID**: `ai.rever.boss.plugin.dynamic.toolsidecar`
-- **Main Class**: `ai.rever.boss.plugin.dynamic.toolsidecar.ToolSidecarDynamicPlugin`
+- **Plugin ID**: `ai.rever.boss.plugin.dynamic.toolevolver`
+- **Main Class**: `ai.rever.boss.plugin.dynamic.toolevolver.ToolEvolverDynamicPlugin`
 - **API Version**: 1.0.55
 
 ## Essential Commands
@@ -27,7 +27,7 @@ Probe and evolve installed tools (plugins): per-plugin memory footprint + leak s
 
 ### Plugin Structure
 ```
-src/main/kotlin/   → Plugin source code (package: ai.rever.boss.plugin.dynamic.toolsidecar)
+src/main/kotlin/   → Plugin source code (package: ai.rever.boss.plugin.dynamic.toolevolver)
 src/main/resources/META-INF/boss-plugin/plugin.json → Plugin manifest (type: mixed — panel + tab)
 src/main/resources/templates/evolve-skill-body.md   → Skill body written into evolved plugin repos
 build.gradle.kts   → Build config + version (single source of truth)
@@ -35,10 +35,10 @@ build.gradle.kts   → Build config + version (single source of truth)
 
 ### What this plugin does
 
-- **Sidebar panel** (`ToolSidecarPanelInfo`, left.bottom): lists installed tools via
+- **Sidebar panel** (`ToolEvolverPanelInfo`, left.bottom): lists installed tools via
   `PluginLoaderDelegate.getLoadedPlugins()` (obtained through `context.getPluginAPI`); its ⋮ menu
-  and the "Open Sidecar…" picker overlay select a tool.
-- **Sidecar tab** (`SidecarTabType`, opened via `splitViewOperations.openTab(SidecarTabInfo(...))`,
+  and the "Open Evolver…" picker overlay select a tool.
+- **Evolver tab** (`EvolverTabType`, opened via `splitViewOperations.openTab(EvolverTabInfo(...))`,
   stable id per target plugin) with two sections:
   - **Probe** — memory footprint of the target plugin sampled from the in-process
     `DiagnosticCommand` MBean class histogram (`MemoryProbe`, filtered by the plugin's mainClass
@@ -46,7 +46,7 @@ build.gradle.kts   → Build config + version (single source of truth)
     resident objects, >1 running instances, monotonic growth), and host stdout/stderr log lines
     filtered to the plugin (`logDataProvider` + keyword match).
   - **Evolve** — locates the plugin's source repo (workspace scan in `EvolveLauncher`, manual
-    override via directory picker), writes the `sidecar-evolve` skill in all four CLI formats
+    override via directory picker), writes the `evolve` skill in all four CLI formats
     (`.claude/skills/`, `.codex/skills/`, `.gemini/commands/`, `.opencode/command/`), and opens a
     BossTerm tab (`TerminalTabInfo(initialCommand, workingDirectory)`) running the chosen CLI.
     Also offers "Rebuild & hot reload now" (`HotReloader.rebuildAndReload`: `./gradlew
@@ -54,15 +54,15 @@ build.gradle.kts   → Build config + version (single source of truth)
 - **Hot reload** (`HotReloader`): copies a built jar into the RUNNING host's plugins dir
   (`PluginLoaderDelegate.getPluginsDirectory()` — `~/.boss/plugins` installed, `~/.boss_debug/plugins`
   dev mode), deletes stale jars of the same plugin, `unloadPlugin` + `loadPlugin`. No restart.
-- **MCP tools** (`ToolSidecarMcpToolProvider`): `sidecar_list_tools`, `sidecar_probe`,
-  `sidecar_open`, `sidecar_evolve`, `sidecar_hot_reload`. The evolve skill instructs the agent to
-  call `sidecar_hot_reload` after each build and to finish by opening a PR (`gh pr create` from an
+- **MCP tools** (`ToolEvolverMcpToolProvider`): `evolver_list_tools`, `evolver_probe`,
+  `evolver_open`, `evolver_evolve`, `evolver_hot_reload`. The evolve skill instructs the agent to
+  call `evolver_hot_reload` after each build and to finish by opening a PR (`gh pr create` from an
   `evolve/<topic>` branch — never pushing `main`, which would trigger a store release).
 
 ### Key Patterns
 - Entry point: `DynamicPlugin` interface with `register(context)` and `dispose()`
 - UI: `PanelComponentWithUI` / `TabComponentWithUI` with `@Composable Content()` wrapped in `BossTheme`
-- State: ViewModel pattern with `StateFlow` (`SidecarServices` is the shared hub)
+- State: ViewModel pattern with `StateFlow` (`EvolverServices` is the shared hub)
 - Providers from `PluginContext`: `splitViewOperations`, `logDataProvider`, `performanceDataProvider`,
   `notificationProvider`, `directoryPickerProvider`; `PluginLoaderDelegate` via `getPluginAPI`
 - Null-safe provider access: providers may be null, UI must handle gracefully

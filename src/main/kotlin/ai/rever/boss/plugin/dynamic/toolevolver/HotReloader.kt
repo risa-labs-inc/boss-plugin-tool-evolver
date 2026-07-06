@@ -1,4 +1,4 @@
-package ai.rever.boss.plugin.dynamic.toolsidecar
+package ai.rever.boss.plugin.dynamic.toolevolver
 
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit
  * host (`PluginLoaderDelegate.getPluginsDirectory()`), so an installed host uses
  * `~/.boss/plugins` and a dev-mode host uses `~/.boss_debug/plugins` automatically.
  */
-class HotReloader(private val services: SidecarServices) {
+class HotReloader(private val services: EvolverServices) {
 
     /**
      * Hot-reload a plugin. With [jarPath]: copy that jar into the live plugins

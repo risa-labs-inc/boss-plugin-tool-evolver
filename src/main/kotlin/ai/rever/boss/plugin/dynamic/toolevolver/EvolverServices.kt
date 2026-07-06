@@ -1,4 +1,4 @@
-package ai.rever.boss.plugin.dynamic.toolsidecar
+package ai.rever.boss.plugin.dynamic.toolevolver
 
 import ai.rever.boss.plugin.api.LoadedPluginInfo
 import ai.rever.boss.plugin.api.NotificationType
@@ -10,11 +10,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 
 /**
- * Shared brain for the Tool Sidecar plugin: one instance per plugin activation,
- * handed to the panel, every sidecar tab, and the MCP tools. All host providers
+ * Shared brain for the Tool Evolver plugin: one instance per plugin activation,
+ * handed to the panel, every evolver tab, and the MCP tools. All host providers
  * are pulled lazily and may be null — callers degrade gracefully.
  */
-class SidecarServices(val context: PluginContext) {
+class EvolverServices(val context: PluginContext) {
 
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -35,16 +35,16 @@ class SidecarServices(val context: PluginContext) {
         listTools().firstOrNull { it.pluginId == pluginId }
 
     /**
-     * Open (or focus) the sidecar tab for [target] in the main panel. The tab id
+     * Open (or focus) the evolver tab for [target] in the main panel. The tab id
      * is stable per plugin so repeated opens don't multiply tabs.
      */
-    fun openSidecarTab(target: LoadedPluginInfo, section: SidecarSection = SidecarSection.PROBE): Boolean {
+    fun openEvolverTab(target: LoadedPluginInfo, section: EvolverSection = EvolverSection.EVOLVE): Boolean {
         val ops = context.splitViewOperations ?: run {
             toastError("Cannot open tab — host does not expose split view operations")
             return false
         }
         ops.openTab(
-            SidecarTabInfo(
+            EvolverTabInfo(
                 targetPluginId = target.pluginId,
                 targetDisplayName = target.displayName,
                 initialSection = section,
@@ -54,11 +54,11 @@ class SidecarServices(val context: PluginContext) {
     }
 
     fun toastSuccess(message: String) {
-        context.notificationProvider?.showToast(message, NotificationType.SUCCESS, title = "Tool Sidecar")
+        context.notificationProvider?.showToast(message, NotificationType.SUCCESS, title = "Tool Evolver")
     }
 
     fun toastError(message: String) {
-        context.notificationProvider?.showToast(message, NotificationType.ERROR, title = "Tool Sidecar")
+        context.notificationProvider?.showToast(message, NotificationType.ERROR, title = "Tool Evolver")
     }
 
     fun dispose() {
@@ -66,6 +66,6 @@ class SidecarServices(val context: PluginContext) {
     }
 
     companion object {
-        const val SELF_PLUGIN_ID = "ai.rever.boss.plugin.dynamic.toolsidecar"
+        const val SELF_PLUGIN_ID = "ai.rever.boss.plugin.dynamic.toolevolver"
     }
 }
