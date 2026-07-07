@@ -4,6 +4,7 @@ import ai.rever.boss.plugin.api.LoadedPluginInfo
 import ai.rever.boss.plugin.api.NotificationType
 import ai.rever.boss.plugin.api.PluginContext
 import ai.rever.boss.plugin.api.PluginLoaderDelegate
+import ai.rever.boss.plugin.api.PluginStorageProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,6 +22,7 @@ class EvolverServices(val context: PluginContext) {
     val memoryProbe = MemoryProbe()
     val evolveLauncher = EvolveLauncher(this)
     val hotReloader = HotReloader(this)
+    val issueReporter = IssueReporter(this)
 
     /** Host plugin-management API; null on hosts too old to register it. */
     val loader: PluginLoaderDelegate?
@@ -61,11 +63,26 @@ class EvolverServices(val context: PluginContext) {
         context.notificationProvider?.showToast(message, NotificationType.ERROR, title = "Tool Evolver")
     }
 
+    // Persistent prefs (null on hosts without storage — remember is then session-only).
+    private val storage: PluginStorageProvider? by lazy {
+        context.pluginStorageFactory?.createStorage(SELF_PLUGIN_ID)
+    }
+
+    /** The user's remembered evolve open-location, or null to ask each time. */
+    suspend fun getRememberedOpenLocation(): EvolveOpenLocation? =
+        storage?.getString(KEY_OPEN_LOCATION)
+            ?.let { runCatching { EvolveOpenLocation.valueOf(it) }.getOrNull() }
+
+    suspend fun setRememberedOpenLocation(location: EvolveOpenLocation) {
+        storage?.putString(KEY_OPEN_LOCATION, location.name)
+    }
+
     fun dispose() {
         scope.cancel()
     }
 
     companion object {
         const val SELF_PLUGIN_ID = "ai.rever.boss.plugin.dynamic.toolevolver"
+        private const val KEY_OPEN_LOCATION = "evolve_open_location"
     }
 }

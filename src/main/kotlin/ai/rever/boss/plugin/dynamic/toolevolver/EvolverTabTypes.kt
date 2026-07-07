@@ -5,15 +5,19 @@ import ai.rever.boss.plugin.api.TabTypeId
 import ai.rever.boss.plugin.api.TabTypeInfo
 import androidx.compose.ui.graphics.vector.ImageVector
 import compose.icons.FeatherIcons
-import compose.icons.feathericons.Activity
+import compose.icons.feathericons.TrendingUp
 
 // EVOLVE first so it is the default/leftmost tab (ordinal 0 = selected on open).
-enum class EvolverSection { EVOLVE, PROBE }
+enum class EvolverSection(val label: String) {
+    EVOLVE("Evolve"),
+    PROBE("Probe"),
+    ISSUE("Issue"),
+}
 
 object EvolverTabType : TabTypeInfo {
     override val typeId = TabTypeId("tool-evolver")
     override val displayName = "Tool Evolver"
-    override val icon = FeatherIcons.Activity
+    override val icon = FeatherIcons.TrendingUp
 }
 
 /**
@@ -27,5 +31,5 @@ data class EvolverTabInfo(
     override val id: String = "tool-evolver-$targetPluginId",
     override val typeId: TabTypeId = EvolverTabType.typeId,
     override val title: String = targetDisplayName,
-    override val icon: ImageVector = FeatherIcons.Activity,
+    override val icon: ImageVector = FeatherIcons.TrendingUp,
 ) : TabInfo

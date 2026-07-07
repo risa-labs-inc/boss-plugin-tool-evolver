@@ -1,8 +1,8 @@
 package ai.rever.boss.plugin.dynamic.toolevolver
 
 import ai.rever.boss.plugin.api.ConsoleLogsAPI
-import ai.rever.boss.plugin.api.DialogChoice
 import ai.rever.boss.plugin.api.LoadedPluginInfo
+import ai.rever.boss.plugin.api.TabSplitMode
 import ai.rever.boss.plugin.api.LogEntryData
 import ai.rever.boss.plugin.api.PanelId
 import ai.rever.boss.plugin.api.PluginLogMatcher
@@ -27,6 +27,19 @@ import kotlinx.coroutines.withContext
  * (memory samples, leak signals, filtered logs) and Evolve state (repo, agent,
  * action log) live here.
  */
+/** What the shared open-location chooser dialog will open when a location is picked. */
+sealed interface PendingOpen {
+    val dialogTitle: String
+
+    data class Evolve(val agent: CliAgent) : PendingOpen {
+        override val dialogTitle get() = "Open ${agent.displayName}"
+    }
+
+    data class OpenUrl(val url: String, val label: String) : PendingOpen {
+        override val dialogTitle get() = "Open $label"
+    }
+}
+
 class EvolverTabViewModel(
     private val services: EvolverServices,
     val tabInfo: EvolverTabInfo,
@@ -106,18 +119,49 @@ class EvolverTabViewModel(
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
+    /** Non-null while the open-location chooser dialog is showing. */
+    private val _pendingOpen = MutableStateFlow<PendingOpen?>(null)
+    val pendingOpen: StateFlow<PendingOpen?> = _pendingOpen.asStateFlow()
+
     private val _actionLog = MutableStateFlow<List<String>>(emptyList())
     val actionLog: StateFlow<List<String>> = _actionLog.asStateFlow()
 
     val agentAvailability: Map<CliAgent, Boolean> =
         CliAgent.entries.associateWith { it.isInstalled() }
 
+    // ------------------------------------------------------------------ issue
+
+    private val _issueTitle = MutableStateFlow("")
+    val issueTitle: StateFlow<String> = _issueTitle.asStateFlow()
+
+    private val _issueBody = MutableStateFlow("")
+    val issueBody: StateFlow<String> = _issueBody.asStateFlow()
+
+    private val _attachDiagnostics = MutableStateFlow(false)
+    val attachDiagnostics: StateFlow<Boolean> = _attachDiagnostics.asStateFlow()
+
+    private val _issueBusy = MutableStateFlow(false)
+    val issueBusy: StateFlow<Boolean> = _issueBusy.asStateFlow()
+
+    /** Resolved target repo slug (owner/repo) for the issue, or null if unknown. */
+    private val _issueRepo = MutableStateFlow<String?>(null)
+    val issueRepo: StateFlow<String?> = _issueRepo.asStateFlow()
+
+    private val _issueLog = MutableStateFlow<List<String>>(emptyList())
+    val issueLog: StateFlow<List<String>> = _issueLog.asStateFlow()
+
+    // Optimistic until the async `gh auth status` check completes (avoids blocking UI).
+    private val _ghAvailable = MutableStateFlow(true)
+    val ghAvailable: StateFlow<Boolean> = _ghAvailable.asStateFlow()
+
     init {
         refreshTarget()
         scope.launch(Dispatchers.IO) {
+            _ghAvailable.value = services.issueReporter.ghAvailable()
             _target.value?.let { target ->
                 _repoPath.value = services.evolveLauncher.resolveSourceRepo(target)?.absolutePath
                 if (_cloneUrl.value.isBlank()) _cloneUrl.value = services.evolveLauncher.guessGitUrl(target)
+                if (_issueRepo.value == null) _issueRepo.value = services.issueReporter.repoSlug(target)
             }
         }
     }
@@ -249,56 +293,154 @@ class EvolverTabViewModel(
     }
 
     fun launchEvolve(agent: CliAgent) {
-        val target = _target.value ?: run {
+        if (_target.value == null) {
             appendAction("Plugin is not loaded — cannot evolve")
             return
         }
-        val repo = _repoPath.value?.let(::File) ?: run {
+        if (_repoPath.value == null) {
             appendAction("No source repo — set one (searched the workspace roots without a match)")
             return
         }
         scope.launch {
-            // Ask where to open — new tab vs split — like the terminal-link chooser.
-            val location = chooseOpenLocation(agent) ?: return@launch  // null = cancelled
-            withContext(Dispatchers.IO) {
-                services.evolveLauncher.launchEvolve(target, agent, repo, _task.value.ifBlank { null }, location).fold(
-                    onSuccess = {
-                        appendAction(it)
-                        services.toastSuccess("${agent.displayName} is evolving ${target.displayName}")
-                    },
-                    onFailure = {
-                        appendAction("Evolve failed: ${it.message}")
-                        services.toastError(it.message ?: "Evolve failed")
-                    },
-                )
+            // Honor a remembered choice; otherwise show the open-location chooser
+            // (the card dialog, matching the terminal-link chooser).
+            val remembered = services.getRememberedOpenLocation()
+            if (remembered != null) doLaunch(agent, remembered)
+            else _pendingOpen.value = PendingOpen.Evolve(agent)
+        }
+    }
+
+    /** The user picked a location in the chooser dialog (optionally remembered). */
+    fun onOpenLocationChosen(location: EvolveOpenLocation, remember: Boolean) {
+        val pending = _pendingOpen.value ?: return
+        _pendingOpen.value = null
+        scope.launch {
+            if (remember) services.setRememberedOpenLocation(location)
+            when (pending) {
+                is PendingOpen.Evolve -> doLaunch(pending.agent, location)
+                is PendingOpen.OpenUrl -> openUrlAt(pending.url, pending.label, location)
             }
         }
     }
 
-    /**
-     * Prompt for where to open the evolve terminal (host-native choice dialog),
-     * mirroring the terminal-link chooser. Returns null if the user cancels;
-     * defaults to a new tab when no dialog provider is available.
-     */
-    private suspend fun chooseOpenLocation(agent: CliAgent): EvolveOpenLocation? {
-        val dialogs = services.context.genericDialogProvider ?: return EvolveOpenLocation.NEW_TAB
-        val choice = dialogs.showChoiceDialog(
-            title = "Open ${agent.displayName}",
-            message = "Where should the evolve terminal open?",
-            choices = listOf(
-                DialogChoice("new_tab", "New tab", "Open in a new tab in the active panel"),
-                DialogChoice("existing", "Existing split", "Reuse the other open split pane"),
-                DialogChoice("vsplit", "Split right", "New split beside the current tab"),
-                DialogChoice("hsplit", "Split down", "New split below the current tab"),
-            ),
-            selectedIndex = 0,
-        ) ?: return null
-        return when (choice.id) {
-            "existing" -> EvolveOpenLocation.EXISTING_SPLIT
-            "vsplit" -> EvolveOpenLocation.SPLIT_RIGHT
-            "hsplit" -> EvolveOpenLocation.SPLIT_DOWN
-            else -> EvolveOpenLocation.NEW_TAB
+    fun dismissOpenDialog() {
+        _pendingOpen.value = null
+    }
+
+    private fun openUrlAt(url: String, label: String, location: EvolveOpenLocation) {
+        val ops = services.context.splitViewOperations ?: return
+        when (location) {
+            EvolveOpenLocation.NEW_TAB -> ops.openUrlInActivePanel(url, label, forceNewTab = true)
+            EvolveOpenLocation.EXISTING_SPLIT -> ops.openUrlInSplit(url, label, TabSplitMode.EXISTING_SPLIT)
+            EvolveOpenLocation.SPLIT_RIGHT -> ops.openUrlInSplit(url, label, TabSplitMode.VERTICAL_SPLIT)
+            EvolveOpenLocation.SPLIT_DOWN -> ops.openUrlInSplit(url, label, TabSplitMode.HORIZONTAL_SPLIT)
         }
+    }
+
+    private suspend fun doLaunch(agent: CliAgent, location: EvolveOpenLocation) {
+        val target = _target.value ?: return
+        val repo = _repoPath.value?.let(::File) ?: return
+        withContext(Dispatchers.IO) {
+            services.evolveLauncher.launchEvolve(target, agent, repo, _task.value.ifBlank { null }, location).fold(
+                onSuccess = {
+                    appendAction(it)
+                    services.toastSuccess("${agent.displayName} is evolving ${target.displayName}")
+                },
+                onFailure = {
+                    appendAction("Evolve failed: ${it.message}")
+                    services.toastError(it.message ?: "Evolve failed")
+                },
+            )
+        }
+    }
+
+    // ------------------------------------------------------------------ issue
+
+    fun setIssueTitle(value: String) { _issueTitle.value = value }
+    fun setIssueBody(value: String) { _issueBody.value = value }
+    fun setAttachDiagnostics(value: Boolean) { _attachDiagnostics.value = value }
+    fun setIssueRepo(value: String) { _issueRepo.value = value.trim().ifBlank { null } }
+
+    /** File a GitHub issue on the plugin's repo (optionally attaching diagnostics). */
+    fun createIssue() {
+        if (_issueBusy.value) return
+        val title = _issueTitle.value.trim()
+        if (title.isBlank()) {
+            appendIssueLog("Title is required")
+            return
+        }
+        val slug = _issueRepo.value?.trim().takeUnless { it.isNullOrBlank() } ?: run {
+            appendIssueLog("No target repo — set owner/repo above")
+            return
+        }
+        _issueBusy.value = true
+        scope.launch(Dispatchers.IO) {
+            try {
+                val body = buildIssueBody()
+                appendIssueLog("Creating issue on $slug…")
+                services.issueReporter.createIssue(slug, title, body).fold(
+                    onSuccess = { url ->
+                        appendIssueLog("Created: $url")
+                        services.toastSuccess("Issue filed on $slug")
+                        _issueTitle.value = ""
+                        _issueBody.value = ""
+                        // Open the new issue through the same "Open Link" chooser
+                        // (honoring a remembered choice), so it can land in a split.
+                        if (url.startsWith("https://")) {
+                            val remembered = services.getRememberedOpenLocation()
+                            if (remembered != null) openUrlAt(url, "Issue", remembered)
+                            else _pendingOpen.value = PendingOpen.OpenUrl(url, "Issue")
+                        }
+                    },
+                    onFailure = {
+                        appendIssueLog("Failed: ${it.message}")
+                        services.toastError(it.message ?: "Issue creation failed")
+                    },
+                )
+            } finally {
+                _issueBusy.value = false
+            }
+        }
+    }
+
+    private fun buildIssueBody(): String {
+        val base = _issueBody.value.trim()
+        val target = _target.value
+        val footer = buildString {
+            appendLine()
+            appendLine()
+            appendLine("---")
+            appendLine("Filed via Tool Evolver.")
+            target?.let { appendLine("Plugin: ${it.pluginId} v${it.version}") }
+        }
+        if (!_attachDiagnostics.value) return base + footer
+        val diag = buildString {
+            appendLine()
+            appendLine("### Diagnostics")
+            val snap = _snapshots.value.lastOrNull()
+            if (snap != null) {
+                appendLine("- Memory: ${MemoryProbe.humanBytes(snap.totalBytes)} across ${snap.instanceCount} instances / ${snap.classCount} classes")
+            }
+            _instances.value.let { appendLine("- Open instances: $it") }
+            val signals = _leakSignals.value
+            if (signals.isNotEmpty()) {
+                appendLine("- Leak signals:")
+                signals.forEach { appendLine("  - $it") }
+            }
+            val recent = logs.value.takeLast(20)
+            if (recent.isNotEmpty()) {
+                appendLine()
+                appendLine("Recent log lines:")
+                appendLine("```")
+                recent.forEach { appendLine("${it.formatTimestamp()} ${it.message.take(300)}") }
+                appendLine("```")
+            }
+        }
+        return base + "\n" + diag + footer
+    }
+
+    private fun appendIssueLog(line: String) {
+        _issueLog.update { (it + line).takeLast(100) }
     }
 
     fun rebuildAndReload() {

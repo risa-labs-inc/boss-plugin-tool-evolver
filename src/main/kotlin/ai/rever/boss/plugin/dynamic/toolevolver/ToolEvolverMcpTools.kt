@@ -97,7 +97,36 @@ class ToolEvolverMcpToolProvider(
                 }
             },
         ),
+        McpToolDefinition(
+            name = "evolver_create_issue",
+            description = "File a GitHub issue on a plugin's repo via the gh CLI. The repo is auto-resolved from the plugin (its manifest url or the risa-labs-inc/boss-plugin-<slug> convention) unless `repo` (owner/repo) is given. Requires gh installed + authenticated.",
+            inputSchema = """{"type":"object","properties":{
+                "plugin_id":{"type":"string","description":"Plugin id the issue is about"},
+                "title":{"type":"string","description":"Issue title"},
+                "body":{"type":"string","description":"Issue body (markdown)"},
+                "repo":{"type":"string","description":"Override target repo as owner/repo"}
+            },"required":["plugin_id","title"]}""".trimIndent(),
+            readOnly = false,
+            handler = McpToolHandler { args ->
+                val pluginId = args.string("plugin_id")
+                    ?: return@McpToolHandler McpToolResult("Missing required argument: plugin_id", isError = true)
+                val title = args.string("title")
+                    ?: return@McpToolHandler McpToolResult("Missing required argument: title", isError = true)
+                withContext(Dispatchers.IO) { createIssue(pluginId, title, args.string("body") ?: "", args.string("repo")) }
+            },
+        ),
     )
+
+    private fun createIssue(pluginId: String, title: String, body: String, repoOverride: String?): McpToolResult {
+        val target = services.findTool(pluginId)
+        val slug = repoOverride?.trim()?.takeUnless { it.isBlank() }
+            ?: target?.let { services.issueReporter.repoSlug(it) }
+            ?: return McpToolResult("Cannot resolve a repo for $pluginId — pass repo=owner/repo", isError = true)
+        return services.issueReporter.createIssue(slug, title, body).fold(
+            onSuccess = { McpToolResult("Filed issue on $slug: $it") },
+            onFailure = { McpToolResult(it.message ?: "Issue creation failed", isError = true) },
+        )
+    }
 
     private fun listTools(): McpToolResult {
         val tools = services.listTools()

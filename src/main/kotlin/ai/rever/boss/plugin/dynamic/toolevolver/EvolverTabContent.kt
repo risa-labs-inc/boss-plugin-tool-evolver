@@ -19,6 +19,17 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Checkbox
+import androidx.compose.material.CheckboxDefaults
+import androidx.compose.material.Surface
+import androidx.compose.material.TextButton
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import compose.icons.FeatherIcons
+import compose.icons.feathericons.Columns
+import compose.icons.feathericons.ExternalLink
+import compose.icons.feathericons.PlusSquare
+import compose.icons.feathericons.Server
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
@@ -37,10 +48,14 @@ import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -533,5 +548,248 @@ private fun Metric(label: String, value: String, color: Color? = null) {
             fontSize = 9.sp,
             color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f),
         )
+    }
+}
+
+// --------------------------------------------------------------------- Issue
+
+@Composable
+internal fun IssueSection(viewModel: EvolverTabViewModel) {
+    val title by viewModel.issueTitle.collectAsState()
+    val body by viewModel.issueBody.collectAsState()
+    val attach by viewModel.attachDiagnostics.collectAsState()
+    val repo by viewModel.issueRepo.collectAsState()
+    val busy by viewModel.issueBusy.collectAsState()
+    val log by viewModel.issueLog.collectAsState()
+    val ghOk by viewModel.ghAvailable.collectAsState()
+
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Card(backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
+            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SectionTitle("New GitHub issue")
+                    Spacer(Modifier.weight(1f))
+                    if (!ghOk) {
+                        Text("gh not authenticated", fontSize = 10.sp, color = Amber)
+                    }
+                }
+                OutlinedTextField(
+                    value = repo ?: "",
+                    onValueChange = viewModel::setIssueRepo,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    textStyle = TextStyle(fontSize = 11.sp, fontFamily = FontFamily.Monospace),
+                    label = { Text("Repository (owner/repo)", fontSize = 10.sp) },
+                    placeholder = { Text("risa-labs-inc/boss-plugin-…", fontSize = 11.sp) },
+                )
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = viewModel::setIssueTitle,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    textStyle = TextStyle(fontSize = 13.sp),
+                    label = { Text("Title", fontSize = 10.sp) },
+                )
+                OutlinedTextField(
+                    value = body,
+                    onValueChange = viewModel::setIssueBody,
+                    modifier = Modifier.fillMaxWidth().height(160.dp),
+                    textStyle = TextStyle(fontSize = 12.sp),
+                    label = { Text("Description", fontSize = 10.sp) },
+                    placeholder = { Text("What's the problem or request?", fontSize = 11.sp) },
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { viewModel.setAttachDiagnostics(!attach) },
+                    ) {
+                        Checkbox(
+                            checked = attach,
+                            onCheckedChange = { viewModel.setAttachDiagnostics(it) },
+                            colors = CheckboxDefaults.colors(checkedColor = Amber),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            "Attach diagnostics (memory, leaks, recent logs)",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = 0.8f),
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    if (busy) {
+                        CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Button(
+                        onClick = { viewModel.createIssue() },
+                        enabled = !busy && title.isNotBlank() && !repo.isNullOrBlank(),
+                        colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary),
+                    ) {
+                        Icon(Icons.Default.Send, null, Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Create issue", fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+
+        Card(
+            Modifier.fillMaxWidth().weight(1f),
+            backgroundColor = MaterialTheme.colors.surface,
+            shape = CardShape,
+            elevation = 0.dp,
+        ) {
+            Column(Modifier.fillMaxSize().padding(14.dp)) {
+                SectionTitle("Activity")
+                Spacer(Modifier.height(6.dp))
+                if (log.isEmpty()) {
+                    Text(
+                        "Filed issues appear here.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.4f),
+                    )
+                } else {
+                    val listState = rememberLazyListState()
+                    LaunchedEffect(log.size) { if (log.isNotEmpty()) listState.scrollToItem(log.size - 1) }
+                    LazyColumn(Modifier.fillMaxSize(), state = listState) {
+                        itemsIndexed(log) { _, line ->
+                            Text(
+                                line,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                color = if (line.startsWith("Failed")) MaterialTheme.colors.error
+                                else MaterialTheme.colors.onSurface.copy(alpha = 0.85f),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// -------------------------------------------------- open-location chooser dialog
+
+/**
+ * Card-style "where to open" chooser, mirroring the host's terminal-link dialog:
+ * icon + title + subtitle cards that act on click, plus a "Remember my choice"
+ * checkbox and Cancel.
+ */
+@Composable
+internal fun OpenLocationDialog(
+    title: String,
+    onChoose: (EvolveOpenLocation, remember: Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var remember by remember { mutableStateOf(false) }
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties()) {
+        Surface(
+            color = MaterialTheme.colors.surface,
+            shape = RoundedCornerShape(12.dp),
+            elevation = 8.dp,
+            modifier = Modifier.width(420.dp),
+        ) {
+            Column(Modifier.padding(20.dp)) {
+                Text(
+                    title,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colors.onSurface,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Where should it open?",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.55f),
+                )
+                Spacer(Modifier.height(16.dp))
+                LocationCard(
+                    icon = FeatherIcons.ExternalLink,
+                    title = "Existing Split",
+                    subtitle = "Open in the other panel",
+                    onClick = { onChoose(EvolveOpenLocation.EXISTING_SPLIT, remember) },
+                )
+                Spacer(Modifier.height(10.dp))
+                LocationCard(
+                    icon = FeatherIcons.Columns,
+                    title = "New Vertical Split",
+                    subtitle = "Open alongside the current tab",
+                    onClick = { onChoose(EvolveOpenLocation.SPLIT_RIGHT, remember) },
+                )
+                Spacer(Modifier.height(10.dp))
+                LocationCard(
+                    icon = FeatherIcons.Server,
+                    title = "New Horizontal Split",
+                    subtitle = "Open below the current tab",
+                    onClick = { onChoose(EvolveOpenLocation.SPLIT_DOWN, remember) },
+                )
+                Spacer(Modifier.height(10.dp))
+                LocationCard(
+                    icon = FeatherIcons.PlusSquare,
+                    title = "New Tab",
+                    subtitle = "Open in a new tab in the active panel",
+                    onClick = { onChoose(EvolveOpenLocation.NEW_TAB, remember) },
+                )
+                Spacer(Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { remember = !remember },
+                    ) {
+                        Checkbox(
+                            checked = remember,
+                            onCheckedChange = { remember = it },
+                            colors = CheckboxDefaults.colors(checkedColor = Amber),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            "Remember my choice",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colors.onSurface,
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel", color = Amber, fontSize = 13.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LocationCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        backgroundColor = MaterialTheme.colors.onSurface.copy(alpha = 0.05f),
+        shape = RoundedCornerShape(8.dp),
+        elevation = 0.dp,
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, null, tint = Amber, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(16.dp))
+            Column {
+                Text(
+                    title,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colors.onSurface,
+                )
+                Text(
+                    subtitle,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.5f),
+                )
+            }
+        }
     }
 }

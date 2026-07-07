@@ -104,12 +104,7 @@ private fun EvolverTabScreen(viewModel: EvolverTabViewModel) {
                 Tab(
                     selected = section == s,
                     onClick = { viewModel.setSection(s) },
-                    text = {
-                        Text(
-                            if (s == EvolverSection.PROBE) "Probe" else "Evolve",
-                            fontSize = 12.sp,
-                        )
-                    },
+                    text = { Text(s.label, fontSize = 12.sp) },
                 )
             }
         }
@@ -117,6 +112,18 @@ private fun EvolverTabScreen(viewModel: EvolverTabViewModel) {
         when (section) {
             EvolverSection.PROBE -> ProbeSection(viewModel)
             EvolverSection.EVOLVE -> EvolveSection(viewModel)
+            EvolverSection.ISSUE -> IssueSection(viewModel)
         }
+    }
+
+    // Rendered at the tab level (not inside a section) so the chooser shows
+    // regardless of which tab triggered it — evolve launch or issue-link open.
+    val pendingOpen by viewModel.pendingOpen.collectAsState()
+    pendingOpen?.let { pending ->
+        OpenLocationDialog(
+            title = pending.dialogTitle,
+            onChoose = { loc, remember -> viewModel.onOpenLocationChosen(loc, remember) },
+            onDismiss = { viewModel.dismissOpenDialog() },
+        )
     }
 }
