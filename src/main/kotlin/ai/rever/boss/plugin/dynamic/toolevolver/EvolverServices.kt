@@ -9,6 +9,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 
 /**
  * Shared brain for the Tool Evolver plugin: one instance per plugin activation,
@@ -37,21 +40,37 @@ class EvolverServices(val context: PluginContext) {
         listTools().firstOrNull { it.pluginId == pluginId }
 
     /**
+     * Section-switch requests for already-open evolver tabs, keyed by pluginId.
+     * When [openEvolverTab] focuses an existing tab, it emits here so that tab's
+     * ViewModel jumps to the requested section (e.g. "Report Issue" → Issue).
+     */
+    private val _sectionRequests = MutableSharedFlow<Pair<String, EvolverSection>>(extraBufferCapacity = 16)
+    val sectionRequests: SharedFlow<Pair<String, EvolverSection>> = _sectionRequests.asSharedFlow()
+
+    /**
      * Open (or focus) the evolver tab for [target] in the main panel. The tab id
-     * is stable per plugin so repeated opens don't multiply tabs.
+     * is stable per plugin (`tool-evolver-<pluginId>`); if a tab with that id is
+     * already open we FOCUS it (and switch its section) instead of opening a
+     * duplicate — the host's openTab doesn't dedupe by id, and duplicate ids
+     * share one component, so stacking them makes closing one blank the others.
      */
     fun openEvolverTab(target: LoadedPluginInfo, section: EvolverSection = EvolverSection.EVOLVE): Boolean {
+        val tabInfo = EvolverTabInfo(
+            targetPluginId = target.pluginId,
+            targetDisplayName = target.displayName,
+            initialSection = section,
+        )
+        val existing = context.activeTabsProvider?.activeTabs?.value?.firstOrNull { it.tabId == tabInfo.id }
+        if (existing != null) {
+            context.activeTabsProvider?.selectTab(existing.tabId, existing.panelId)
+            _sectionRequests.tryEmit(target.pluginId to section)
+            return true
+        }
         val ops = context.splitViewOperations ?: run {
             toastError("Cannot open tab — host does not expose split view operations")
             return false
         }
-        ops.openTab(
-            EvolverTabInfo(
-                targetPluginId = target.pluginId,
-                targetDisplayName = target.displayName,
-                initialSection = section,
-            )
-        )
+        ops.openTab(tabInfo)
         return true
     }
 

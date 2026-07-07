@@ -155,6 +155,13 @@ class EvolverTabViewModel(
     val ghStatus: StateFlow<GhStatus> = _ghStatus.asStateFlow()
 
     init {
+        // Re-focusing this tab (e.g. via "Open Evolver" / "Report Issue" again)
+        // switches it to the requested section instead of opening a duplicate.
+        scope.launch {
+            services.sectionRequests.collect { (pluginId, requested) ->
+                if (pluginId == targetPluginId) _section.value = requested
+            }
+        }
         refreshTarget()
         scope.launch(Dispatchers.IO) {
             _ghStatus.value = services.issueReporter.ghStatus()
