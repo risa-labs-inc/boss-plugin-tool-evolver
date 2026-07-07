@@ -4,6 +4,9 @@ import ai.rever.boss.plugin.api.LoadedPluginInfo
 import java.io.File
 import java.util.concurrent.TimeUnit
 
+/** Readiness of the `gh` CLI for filing issues. */
+enum class GhStatus { NOT_INSTALLED, NOT_AUTHENTICATED, READY }
+
 /**
  * Files a GitHub issue against an installed plugin's repo via the `gh` CLI.
  *
@@ -28,6 +31,11 @@ class IssueReporter(private val services: EvolverServices) {
      */
     fun createIssue(slug: String, title: String, body: String): Result<String> = runCatching {
         require(title.isNotBlank()) { "Issue title is required" }
+        when (ghStatus()) {
+            GhStatus.NOT_INSTALLED -> error("GitHub CLI (gh) is not installed — install it from https://cli.github.com")
+            GhStatus.NOT_AUTHENTICATED -> error("gh is not authenticated — run `gh auth login`")
+            GhStatus.READY -> {}
+        }
         val (out, exit) = runGh(
             listOf("issue", "create", "--repo", slug, "--title", title, "--body", body.ifBlank { " " })
         )
@@ -46,11 +54,27 @@ class IssueReporter(private val services: EvolverServices) {
             ?: "Issue created on $slug"
     }
 
-    /** True when `gh` is on PATH and authenticated (for enabling the UI). */
-    fun ghAvailable(): Boolean = runCatching {
-        val (_, exit) = runGh(listOf("auth", "status"))
-        exit == 0
-    }.getOrDefault(false)
+    /**
+     * gh readiness for the UI: distinguishes "not installed" (no binary on PATH)
+     * from "not authenticated" (binary present, `gh auth status` non-zero) so the
+     * tab can show the right guidance instead of a generic failure.
+     */
+    fun ghStatus(): GhStatus {
+        if (!binaryOnPath("gh")) return GhStatus.NOT_INSTALLED
+        val exit = runCatching { runGh(listOf("auth", "status")).second }.getOrNull()
+            ?: return GhStatus.NOT_INSTALLED // start() threw despite the PATH probe
+        return if (exit == 0) GhStatus.READY else GhStatus.NOT_AUTHENTICATED
+    }
+
+    /** True when [bin] is an executable file on PATH or a common install dir. */
+    private fun binaryOnPath(bin: String): Boolean {
+        val home = System.getProperty("user.home")
+        val extras = listOf("$home/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin")
+        val pathDirs = (System.getenv("PATH") ?: "").split(File.pathSeparator)
+        return (pathDirs + extras).any { dir ->
+            dir.isNotBlank() && File(dir, bin).let { it.isFile && it.canExecute() }
+        }
+    }
 
     private fun originRemote(dir: File): String? = runCatching {
         val (out, exit) = run(dir, listOf("git", "remote", "get-url", "origin"))

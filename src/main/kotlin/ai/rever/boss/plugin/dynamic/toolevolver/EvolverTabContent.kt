@@ -561,7 +561,7 @@ internal fun IssueSection(viewModel: EvolverTabViewModel) {
     val repo by viewModel.issueRepo.collectAsState()
     val busy by viewModel.issueBusy.collectAsState()
     val log by viewModel.issueLog.collectAsState()
-    val ghOk by viewModel.ghAvailable.collectAsState()
+    val ghStatus by viewModel.ghStatus.collectAsState()
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
@@ -569,9 +569,12 @@ internal fun IssueSection(viewModel: EvolverTabViewModel) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     SectionTitle("New GitHub issue")
                     Spacer(Modifier.weight(1f))
-                    if (!ghOk) {
-                        Text("gh not authenticated", fontSize = 10.sp, color = Amber)
+                    val ghWarning = when (ghStatus) {
+                        GhStatus.NOT_INSTALLED -> "GitHub CLI (gh) not installed"
+                        GhStatus.NOT_AUTHENTICATED -> "gh not authenticated — run gh auth login"
+                        GhStatus.READY -> null
                     }
+                    ghWarning?.let { Text(it, fontSize = 10.sp, color = Amber) }
                 }
                 OutlinedTextField(
                     value = repo ?: "",
@@ -622,7 +625,7 @@ internal fun IssueSection(viewModel: EvolverTabViewModel) {
                     }
                     Button(
                         onClick = { viewModel.createIssue() },
-                        enabled = !busy && title.isNotBlank() && !repo.isNullOrBlank(),
+                        enabled = !busy && title.isNotBlank() && !repo.isNullOrBlank() && ghStatus == GhStatus.READY,
                         colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary),
                     ) {
                         Icon(Icons.Default.Send, null, Modifier.size(14.dp))

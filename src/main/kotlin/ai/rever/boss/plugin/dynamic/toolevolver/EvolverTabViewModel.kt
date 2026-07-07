@@ -150,14 +150,14 @@ class EvolverTabViewModel(
     private val _issueLog = MutableStateFlow<List<String>>(emptyList())
     val issueLog: StateFlow<List<String>> = _issueLog.asStateFlow()
 
-    // Optimistic until the async `gh auth status` check completes (avoids blocking UI).
-    private val _ghAvailable = MutableStateFlow(true)
-    val ghAvailable: StateFlow<Boolean> = _ghAvailable.asStateFlow()
+    // Optimistic until the async check completes (avoids blocking UI on subprocesses).
+    private val _ghStatus = MutableStateFlow(GhStatus.READY)
+    val ghStatus: StateFlow<GhStatus> = _ghStatus.asStateFlow()
 
     init {
         refreshTarget()
         scope.launch(Dispatchers.IO) {
-            _ghAvailable.value = services.issueReporter.ghAvailable()
+            _ghStatus.value = services.issueReporter.ghStatus()
             _target.value?.let { target ->
                 _repoPath.value = services.evolveLauncher.resolveSourceRepo(target)?.absolutePath
                 if (_cloneUrl.value.isBlank()) _cloneUrl.value = services.evolveLauncher.guessGitUrl(target)
