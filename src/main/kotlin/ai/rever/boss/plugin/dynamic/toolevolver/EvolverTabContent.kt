@@ -37,6 +37,7 @@ import androidx.compose.material.Card
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Divider
 import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedButton
 import androidx.compose.material.OutlinedTextField
@@ -326,6 +327,10 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
     val actionLog by viewModel.actionLog.collectAsState()
     val cloneUrl by viewModel.cloneUrl.collectAsState()
     val cloneParent by viewModel.cloneParent.collectAsState()
+    val evolveMode by viewModel.evolveMode.collectAsState()
+    val worktreeSlug by viewModel.worktreeSlug.collectAsState()
+    val worktrees by viewModel.worktrees.collectAsState()
+    val worktreeReady = evolveMode == EvolveMode.NORMAL || worktreeSlug.isNotBlank()
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
@@ -399,11 +404,75 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
             }
         }
 
+        // ---------------------------------------------------- evolution mode
+        Card(backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
+            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionTitle("Evolution mode")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ModeChip(
+                        title = "Normal",
+                        subtitle = "This checkout",
+                        selected = evolveMode == EvolveMode.NORMAL,
+                        modifier = Modifier.weight(1f),
+                    ) { viewModel.setEvolveMode(EvolveMode.NORMAL) }
+                    ModeChip(
+                        title = "Worktree",
+                        subtitle = "Isolated branch — evolve in parallel",
+                        selected = evolveMode == EvolveMode.WORKTREE,
+                        modifier = Modifier.weight(1f),
+                    ) { viewModel.setEvolveMode(EvolveMode.WORKTREE) }
+                }
+                if (evolveMode == EvolveMode.WORKTREE) {
+                    OutlinedTextField(
+                        value = worktreeSlug,
+                        onValueChange = viewModel::setWorktreeSlug,
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        textStyle = TextStyle(fontSize = 12.sp),
+                        label = { Text("Feature / issue name → .worktrees/<slug> on evolve/<slug>", fontSize = 10.sp) },
+                        placeholder = { Text("e.g. dark-mode or fix-crash", fontSize = 11.sp) },
+                    )
+                    if (worktrees.isEmpty()) {
+                        Text(
+                            "No worktrees yet — name one above and pick an agent to create it.",
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f),
+                        )
+                    } else {
+                        Text("Active worktrees (tap to target)", fontSize = 10.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f))
+                        worktrees.forEach { wt ->
+                            val active = worktreeSlug.isNotBlank() && wt.slug == worktreeSlug
+                            Row(
+                                Modifier.fillMaxWidth()
+                                    .clickable { viewModel.setWorktreeSlug(wt.slug) }
+                                    .background(
+                                        if (active) Amber.copy(alpha = 0.12f) else MaterialTheme.colors.onSurface.copy(alpha = 0.04f),
+                                        CardShape,
+                                    )
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(wt.slug, fontSize = 12.sp, color = MaterialTheme.colors.onSurface)
+                                    Text(wt.branch, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colors.onSurface.copy(alpha = 0.5f))
+                                }
+                                IconButton(onClick = { viewModel.removeWorktree(wt) }, enabled = !busy, modifier = Modifier.size(28.dp)) {
+                                    Icon(Icons.Default.Delete, "Remove worktree", tint = MaterialTheme.colors.error, modifier = Modifier.size(15.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Card(backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
             Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionTitle("Evolve with…")
                 Text(
-                    "Writes the evolve skill (plugin context, hot-reload + PR workflow) into the repo and opens the agent in a BossTerm tab.",
+                    if (evolveMode == EvolveMode.WORKTREE)
+                        "Creates/uses .worktrees/${worktreeSlug.ifBlank { "<name>" }} on its own branch, writes the evolve skill there, and opens the agent in a BossTerm tab."
+                    else "Writes the evolve skill (plugin context, hot-reload + PR workflow) into the repo and opens the agent in a BossTerm tab.",
                     fontSize = 10.sp,
                     color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f),
                 )
@@ -412,7 +481,7 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                         AgentButton(
                             agent = agent,
                             installed = viewModel.agentAvailability[agent] == true,
-                            enabled = !busy && repoPath != null,
+                            enabled = !busy && repoPath != null && worktreeReady,
                             onClick = { viewModel.launchEvolve(agent) },
                             modifier = Modifier.weight(1f),
                         )
@@ -470,6 +539,32 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ModeChip(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = modifier.clickable(onClick = onClick),
+        backgroundColor = if (selected) Amber.copy(alpha = 0.15f) else MaterialTheme.colors.background,
+        shape = CardShape,
+        elevation = 0.dp,
+    ) {
+        Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                title,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (selected) Amber else MaterialTheme.colors.onBackground,
+            )
+            Text(subtitle, fontSize = 9.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.5f))
         }
     }
 }

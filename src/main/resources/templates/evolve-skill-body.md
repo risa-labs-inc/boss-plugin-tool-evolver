@@ -39,15 +39,7 @@ launched this terminal is RUNNING and loads this plugin from `@@PLUGINS_DIR@@`
 
 ## Ship it (required once the evolution is verified)
 
-Create a PR — do NOT push `main` directly (pushing `main` triggers a store release):
-
-```bash
-git checkout -b evolve/<short-topic>
-git add -A
-git commit -m "<type>: <what evolved>"   # feat/fix/refactor…
-git push -u origin evolve/<short-topic>
-gh pr create --fill --body "<what changed, why, and how it was verified (hot-reloaded live via Tool Evolver)>"
-```
+@@BRANCH_GUIDANCE@@
 
 If `origin` is missing or `gh` is unauthenticated, stop after the commit and tell the user.
 

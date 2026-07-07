@@ -31,7 +31,7 @@ import kotlinx.coroutines.withContext
 sealed interface PendingOpen {
     val dialogTitle: String
 
-    data class Evolve(val agent: CliAgent) : PendingOpen {
+    data class Evolve(val agent: CliAgent, val dirPath: String, val branch: String?) : PendingOpen {
         override val dialogTitle get() = "Open ${agent.displayName}"
     }
 
@@ -109,6 +109,18 @@ class EvolverTabViewModel(
     private val _task = MutableStateFlow("")
     val task: StateFlow<String> = _task.asStateFlow()
 
+    /** Normal (repo working tree) vs worktree (isolated, parallel) evolution. */
+    private val _evolveMode = MutableStateFlow(EvolveMode.NORMAL)
+    val evolveMode: StateFlow<EvolveMode> = _evolveMode.asStateFlow()
+
+    /** Feature/issue name for a new worktree (slugified to the evolve/<slug> branch). */
+    private val _worktreeSlug = MutableStateFlow("")
+    val worktreeSlug: StateFlow<String> = _worktreeSlug.asStateFlow()
+
+    /** Existing evolution worktrees for this plugin's repo. */
+    private val _worktrees = MutableStateFlow<List<WorktreeInfo>>(emptyList())
+    val worktrees: StateFlow<List<WorktreeInfo>> = _worktrees.asStateFlow()
+
     /** Editable git URL + parent dir for cloning a repo when none is found locally. */
     private val _cloneUrl = MutableStateFlow("")
     val cloneUrl: StateFlow<String> = _cloneUrl.asStateFlow()
@@ -169,6 +181,7 @@ class EvolverTabViewModel(
                 _repoPath.value = services.evolveLauncher.resolveSourceRepo(target)?.absolutePath
                 if (_cloneUrl.value.isBlank()) _cloneUrl.value = services.evolveLauncher.guessGitUrl(target)
                 if (_issueRepo.value == null) _issueRepo.value = services.issueReporter.repoSlug(target)
+                refreshWorktrees()
             }
         }
     }
@@ -299,6 +312,34 @@ class EvolverTabViewModel(
         }
     }
 
+    fun setEvolveMode(mode: EvolveMode) {
+        _evolveMode.value = mode
+        if (mode == EvolveMode.WORKTREE) refreshWorktrees()
+    }
+
+    fun setWorktreeSlug(value: String) { _worktreeSlug.value = value }
+
+    fun refreshWorktrees() {
+        val repo = _repoPath.value?.let(::File) ?: return
+        scope.launch(Dispatchers.IO) { _worktrees.value = services.evolveLauncher.listWorktrees(repo) }
+    }
+
+    fun removeWorktree(wt: WorktreeInfo) {
+        if (_busy.value) return
+        val repo = _repoPath.value?.let(::File) ?: return
+        _busy.value = true
+        scope.launch(Dispatchers.IO) {
+            try {
+                services.evolveLauncher.removeWorktree(repo, wt.slug, ::appendAction).fold(
+                    onSuccess = { appendAction("Removed worktree ${wt.slug}"); refreshWorktrees() },
+                    onFailure = { appendAction("Remove failed: ${it.message}") },
+                )
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
     fun launchEvolve(agent: CliAgent) {
         if (_target.value == null) {
             appendAction("Plugin is not loaded — cannot evolve")
@@ -309,11 +350,42 @@ class EvolverTabViewModel(
             return
         }
         scope.launch {
-            // Honor a remembered choice; otherwise show the open-location chooser
-            // (the card dialog, matching the terminal-link chooser).
+            // Resolve the working dir (creating a worktree in worktree mode), then
+            // honor a remembered open-location or show the chooser dialog.
+            val resolved = resolveWorkDir() ?: return@launch
+            val (dir, branch) = resolved
             val remembered = services.getRememberedOpenLocation()
-            if (remembered != null) doLaunch(agent, remembered)
-            else _pendingOpen.value = PendingOpen.Evolve(agent)
+            if (remembered != null) doLaunch(agent, remembered, dir, branch)
+            else _pendingOpen.value = PendingOpen.Evolve(agent, dir.absolutePath, branch)
+        }
+    }
+
+    /** Relaunch an agent in an existing worktree. */
+    fun reopenWorktree(wt: WorktreeInfo, agent: CliAgent) {
+        val dir = File(wt.path)
+        scope.launch {
+            val remembered = services.getRememberedOpenLocation()
+            if (remembered != null) doLaunch(agent, remembered, dir, wt.branch)
+            else _pendingOpen.value = PendingOpen.Evolve(agent, dir.absolutePath, wt.branch)
+        }
+    }
+
+    /** Returns (working dir, branch) for the current mode, or null if it can't proceed. */
+    private suspend fun resolveWorkDir(): Pair<File, String?>? {
+        val repo = _repoPath.value?.let(::File) ?: return null
+        return when (_evolveMode.value) {
+            EvolveMode.NORMAL -> repo to null
+            EvolveMode.WORKTREE -> {
+                if (_worktreeSlug.value.isBlank()) {
+                    appendAction("Enter a name for the worktree evolution first")
+                    return null
+                }
+                val slug = services.evolveLauncher.slugify(_worktreeSlug.value)
+                withContext(Dispatchers.IO) { services.evolveLauncher.ensureWorktree(repo, slug, ::appendAction) }.fold(
+                    onSuccess = { dir -> refreshWorktrees(); dir to "evolve/$slug" },
+                    onFailure = { appendAction("Worktree failed: ${it.message}"); null },
+                )
+            }
         }
     }
 
@@ -324,7 +396,7 @@ class EvolverTabViewModel(
         scope.launch {
             if (remember) services.setRememberedOpenLocation(location)
             when (pending) {
-                is PendingOpen.Evolve -> doLaunch(pending.agent, location)
+                is PendingOpen.Evolve -> doLaunch(pending.agent, location, File(pending.dirPath), pending.branch)
                 is PendingOpen.OpenUrl -> openUrlAt(pending.url, pending.label, location)
             }
         }
@@ -344,11 +416,10 @@ class EvolverTabViewModel(
         }
     }
 
-    private suspend fun doLaunch(agent: CliAgent, location: EvolveOpenLocation) {
+    private suspend fun doLaunch(agent: CliAgent, location: EvolveOpenLocation, dir: File, branch: String?) {
         val target = _target.value ?: return
-        val repo = _repoPath.value?.let(::File) ?: return
         withContext(Dispatchers.IO) {
-            services.evolveLauncher.launchEvolve(target, agent, repo, _task.value.ifBlank { null }, location).fold(
+            services.evolveLauncher.launchEvolve(target, agent, dir, _task.value.ifBlank { null }, location, branch).fold(
                 onSuccess = {
                     appendAction(it)
                     services.toastSuccess("${agent.displayName} is evolving ${target.displayName}")
