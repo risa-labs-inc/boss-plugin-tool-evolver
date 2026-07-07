@@ -96,11 +96,10 @@ internal fun ProbeSection(viewModel: EvolverTabViewModel) {
     val leakSignals by viewModel.leakSignals.collectAsState()
     val instances by viewModel.instances.collectAsState()
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).weight(1f),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
             // ------------------------------------------------ tool info card
             Card(backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -225,25 +224,21 @@ internal fun ProbeSection(viewModel: EvolverTabViewModel) {
                     }
                 }
             }
-        }
 
-        Spacer(Modifier.height(12.dp))
-        LogsCard(viewModel, Modifier.fillMaxWidth().weight(1f))
+            // --------------------------------------------------- logs card
+            // Rendered inline (not a fixed bottom pane) so it scrolls with the
+            // rest of the Probe content as one page.
+            LogsCard(viewModel)
     }
 }
 
 @Composable
-private fun LogsCard(viewModel: EvolverTabViewModel, modifier: Modifier = Modifier) {
+private fun LogsCard(viewModel: EvolverTabViewModel) {
     val logs by viewModel.logs.collectAsState()
     val logQuery by viewModel.logQuery.collectAsState()
-    val listState = rememberLazyListState()
 
-    LaunchedEffect(logs.size) {
-        if (logs.isNotEmpty()) listState.scrollToItem(logs.size - 1)
-    }
-
-    Card(modifier, backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
-        Column(Modifier.fillMaxSize().padding(14.dp)) {
+    Card(Modifier.fillMaxWidth(), backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
+        Column(Modifier.fillMaxWidth().padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SectionTitle("Logs (lines mentioning this tool)")
                 Spacer(Modifier.weight(1f))
@@ -277,17 +272,18 @@ private fun LogsCard(viewModel: EvolverTabViewModel, modifier: Modifier = Modifi
             )
             Spacer(Modifier.height(6.dp))
             if (logs.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        "No matching log lines yet",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.4f),
-                    )
-                }
+                Text(
+                    "No matching log lines yet",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.4f),
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
             } else {
-                LazyColumn(Modifier.fillMaxSize(), state = listState) {
-                    items(logs) { entry ->
-                        Row {
+                // Plain Column (not LazyColumn) so the lines are part of the
+                // page's single scroll rather than a nested scrollable region.
+                Column(Modifier.fillMaxWidth()) {
+                    logs.forEach { entry ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
                             Text(
                                 entry.formatTimestamp(),
                                 fontSize = 10.sp,
