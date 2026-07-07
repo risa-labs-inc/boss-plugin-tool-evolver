@@ -48,10 +48,10 @@ class ToolEvolverMcpToolProvider(
         ),
         McpToolDefinition(
             name = "evolver_open",
-            description = "Open the Tool Evolver tab for a plugin in the main panel (sections: probe, evolve).",
+            description = "Open the Tool Evolver tab for a plugin in the main panel (sections: evolve, probe, issue).",
             inputSchema = """{"type":"object","properties":{
                 "plugin_id":{"type":"string","description":"Plugin id to open the evolver for"},
-                "section":{"type":"string","enum":["probe","evolve"],"description":"Section to open (default evolve)"}
+                "section":{"type":"string","enum":["evolve","probe","issue"],"description":"Section to open (default evolve)"}
             },"required":["plugin_id"]}""".trimIndent(),
             readOnly = false,
             handler = McpToolHandler { args ->
@@ -59,7 +59,11 @@ class ToolEvolverMcpToolProvider(
                     ?: return@McpToolHandler McpToolResult("Missing required argument: plugin_id", isError = true)
                 val target = services.findTool(pluginId)
                     ?: return@McpToolHandler McpToolResult("No loaded plugin with id $pluginId", isError = true)
-                val section = if (args.string("section")?.lowercase() == "probe") EvolverSection.PROBE else EvolverSection.EVOLVE
+                val section = when (args.string("section")?.lowercase()) {
+                    "probe" -> EvolverSection.PROBE
+                    "issue" -> EvolverSection.ISSUE
+                    else -> EvolverSection.EVOLVE
+                }
                 if (services.openEvolverTab(target, section)) McpToolResult("Opened evolver for ${target.displayName} (${section.name.lowercase()})")
                 else McpToolResult("Host does not expose split view operations", isError = true)
             },
