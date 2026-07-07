@@ -236,6 +236,12 @@ internal fun ProbeSection(viewModel: EvolverTabViewModel) {
 private fun LogsCard(viewModel: EvolverTabViewModel) {
     val logs by viewModel.logs.collectAsState()
     val logQuery by viewModel.logQuery.collectAsState()
+    val listState = rememberLazyListState()
+
+    // Keep the newest line in view within the card's own scroll region.
+    LaunchedEffect(logs.size) {
+        if (logs.isNotEmpty()) listState.scrollToItem(logs.size - 1)
+    }
 
     Card(Modifier.fillMaxWidth(), backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
         Column(Modifier.fillMaxWidth().padding(14.dp)) {
@@ -279,10 +285,15 @@ private fun LogsCard(viewModel: EvolverTabViewModel) {
                     modifier = Modifier.padding(vertical = 8.dp),
                 )
             } else {
-                // Plain Column (not LazyColumn) so the lines are part of the
-                // page's single scroll rather than a nested scrollable region.
-                Column(Modifier.fillMaxWidth()) {
-                    logs.forEach { entry ->
+                // Fixed-height card region with its own scroll: the log list
+                // stays bounded and scrolls independently of the page. A fixed
+                // height is what lets a LazyColumn live inside the page's
+                // verticalScroll (bounded constraint).
+                LazyColumn(
+                    Modifier.fillMaxWidth().height(260.dp),
+                    state = listState,
+                ) {
+                    items(logs) { entry ->
                         Row(Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
                             Text(
                                 entry.formatTimestamp(),
@@ -316,7 +327,7 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
     val cloneUrl by viewModel.cloneUrl.collectAsState()
     val cloneParent by viewModel.cloneParent.collectAsState()
 
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
             Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionTitle("Source repo")
@@ -428,12 +439,12 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
         }
 
         Card(
-            Modifier.fillMaxWidth().weight(1f),
+            Modifier.fillMaxWidth(),
             backgroundColor = MaterialTheme.colors.surface,
             shape = CardShape,
             elevation = 0.dp,
         ) {
-            Column(Modifier.fillMaxSize().padding(14.dp)) {
+            Column(Modifier.fillMaxWidth().padding(14.dp)) {
                 SectionTitle("Activity")
                 Spacer(Modifier.height(6.dp))
                 if (actionLog.isEmpty()) {
@@ -447,7 +458,7 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                     LaunchedEffect(actionLog.size) {
                         if (actionLog.isNotEmpty()) listState.scrollToItem(actionLog.size - 1)
                     }
-                    LazyColumn(Modifier.fillMaxSize(), state = listState) {
+                    LazyColumn(Modifier.fillMaxWidth().height(200.dp), state = listState) {
                         itemsIndexed(actionLog) { _, line ->
                             Text(
                                 line,
@@ -559,7 +570,7 @@ internal fun IssueSection(viewModel: EvolverTabViewModel) {
     val log by viewModel.issueLog.collectAsState()
     val ghStatus by viewModel.ghStatus.collectAsState()
 
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
             Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -633,12 +644,12 @@ internal fun IssueSection(viewModel: EvolverTabViewModel) {
         }
 
         Card(
-            Modifier.fillMaxWidth().weight(1f),
+            Modifier.fillMaxWidth(),
             backgroundColor = MaterialTheme.colors.surface,
             shape = CardShape,
             elevation = 0.dp,
         ) {
-            Column(Modifier.fillMaxSize().padding(14.dp)) {
+            Column(Modifier.fillMaxWidth().padding(14.dp)) {
                 SectionTitle("Activity")
                 Spacer(Modifier.height(6.dp))
                 if (log.isEmpty()) {
@@ -650,7 +661,7 @@ internal fun IssueSection(viewModel: EvolverTabViewModel) {
                 } else {
                     val listState = rememberLazyListState()
                     LaunchedEffect(log.size) { if (log.isNotEmpty()) listState.scrollToItem(log.size - 1) }
-                    LazyColumn(Modifier.fillMaxSize(), state = listState) {
+                    LazyColumn(Modifier.fillMaxWidth().height(200.dp), state = listState) {
                         itemsIndexed(log) { _, line ->
                             Text(
                                 line,
