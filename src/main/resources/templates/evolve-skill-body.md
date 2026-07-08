@@ -19,6 +19,26 @@ launched this terminal is RUNNING and loads this plugin from `@@PLUGINS_DIR@@`
 - While iterating locally keep ONE version and overwrite the same jar; bump the version only in
   the final commit.
 
+## Platform capabilities (api ≥ 1.0.62, host ≥ the platform release)
+
+Beyond panels/tabs/MCP tools, plugins can extend host chrome — all hooks on `PluginContext`
+(default no-ops on older hosts, auto-unregistered on unload, types in `ai.rever.boss.plugin.api`):
+`registerPanelMenuContribution` (items in any panel's "…"/right-click top-bar menu — yours,
+another plugin's by panel-id, or ALL; keep `items()` cheap, it may run per recomposition),
+`TabTypeInfo.newTabSpec`/`createTabInfo` (appear in the New Tab dialog),
+`registerSettingsPage` (page under Settings → Plugins; set `selfScrolling = true` when Content
+uses LazyColumn/own scroll), `registerDeepLinkActionHandler`
+(`boss://plugin?id=<handlerId>&action=…` — validate params, it's external input),
+`registerShortcutActionProvider` (actionIds `plugin.<pluginId>.<name>`; default chords MUST
+include Cmd/Ctrl/Alt or they register unbound), `registerStatusBarItem` (small single-row
+composable). Cross-plugin APIs via `registerPluginAPI`/`getPluginAPI` work with NEW SDK
+interfaces without any host release (the runtime-updatable API layer).
+
+Version gates when the evolution adopts new APIs: brand-new SDK-only types → bump
+`minApiVersion` in `plugin.json`; host-rendered capabilities (the registries above) →
+`minBossVersion`. Feature-detect at runtime with `BossApiRuntime.isAtLeast("1.0.62")` rather
+than crashing on older setups.
+
 ## Evolution loop
 
 1. Understand the requested change. Read the relevant sources in this repo first.
