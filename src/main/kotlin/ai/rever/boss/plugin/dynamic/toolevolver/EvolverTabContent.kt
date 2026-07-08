@@ -333,6 +333,8 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
     val worktrees by viewModel.worktrees.collectAsState()
     val worktreeReady = evolveMode == EvolveMode.NORMAL || worktreeSlug.isNotBlank()
     val canEvolve by viewModel.canEvolve.collectAsState()
+    val agentAvailability by viewModel.agentAvailability.collectAsState()
+    val gitInstalled by viewModel.gitInstalled.collectAsState()
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
@@ -387,10 +389,10 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                         }
                         Button(
                             onClick = { viewModel.cloneRepo() },
-                            enabled = !busy && cloneUrl.isNotBlank(),
+                            enabled = !busy && cloneUrl.isNotBlank() && gitInstalled,
                             colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary),
                         ) {
-                            Text("Clone", fontSize = 11.sp)
+                            Text(if (gitInstalled) "Clone" else "git missing", fontSize = 11.sp)
                         }
                     }
                 }
@@ -419,8 +421,9 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                     ) { viewModel.setEvolveMode(EvolveMode.NORMAL) }
                     ModeChip(
                         title = "Worktree",
-                        subtitle = "Isolated branch — evolve in parallel",
+                        subtitle = if (gitInstalled) "Isolated branch — evolve in parallel" else "Requires git (not installed)",
                         selected = evolveMode == EvolveMode.WORKTREE,
+                        enabled = gitInstalled,
                         modifier = Modifier.weight(1f),
                     ) { viewModel.setEvolveMode(EvolveMode.WORKTREE) }
                 }
@@ -492,10 +495,13 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CliAgent.entries.forEach { agent ->
+                        val installed = agentAvailability[agent] == true
                         AgentButton(
                             agent = agent,
-                            installed = viewModel.agentAvailability[agent] == true,
-                            enabled = !busy && repoPath != null && worktreeReady && canEvolve,
+                            installed = installed,
+                            // Gated on the CLI actually being installed — a missing
+                            // binary can't be launched, so the button is disabled.
+                            enabled = !busy && repoPath != null && worktreeReady && canEvolve && installed,
                             onClick = { viewModel.launchEvolve(agent) },
                             modifier = Modifier.weight(1f),
                         )
@@ -562,11 +568,12 @@ private fun ModeChip(
     title: String,
     subtitle: String,
     selected: Boolean,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     Card(
-        modifier = modifier.clickable(onClick = onClick),
+        modifier = modifier.clickable(enabled = enabled, onClick = onClick),
         backgroundColor = if (selected) Amber.copy(alpha = 0.15f) else MaterialTheme.colors.background,
         shape = CardShape,
         elevation = 0.dp,
@@ -576,9 +583,13 @@ private fun ModeChip(
                 title,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
-                color = if (selected) Amber else MaterialTheme.colors.onBackground,
+                color = when {
+                    !enabled -> MaterialTheme.colors.onBackground.copy(alpha = 0.35f)
+                    selected -> Amber
+                    else -> MaterialTheme.colors.onBackground
+                },
             )
-            Text(subtitle, fontSize = 9.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.5f))
+            Text(subtitle, fontSize = 9.sp, color = MaterialTheme.colors.onSurface.copy(alpha = if (enabled) 0.5f else 0.3f))
         }
     }
 }

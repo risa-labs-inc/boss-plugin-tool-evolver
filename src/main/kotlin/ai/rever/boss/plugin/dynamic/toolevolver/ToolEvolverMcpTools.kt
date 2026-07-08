@@ -212,6 +212,12 @@ class ToolEvolverMcpToolProvider(
         val target = services.findTool(pluginId)
             ?: return McpToolResult("No loaded plugin with id $pluginId", isError = true)
         val agent = CliAgent.fromId(agentId) ?: CliAgent.CLAUDE_CODE
+        if (!agent.isInstalled()) {
+            return McpToolResult(
+                "${agent.displayName} CLI ('${agent.binary}') is not installed on this machine — install it or pick another agent (claude/codex/gemini/opencode).",
+                isError = true,
+            )
+        }
         val repo = repoPath?.let { File(it) }
             ?: services.evolveLauncher.resolveSourceRepo(target)
             ?: run {

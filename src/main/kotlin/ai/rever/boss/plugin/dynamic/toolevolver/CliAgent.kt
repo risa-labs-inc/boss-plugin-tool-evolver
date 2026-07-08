@@ -40,16 +40,19 @@ enum class CliAgent(
     }
 
     /** Best-effort check whether the CLI binary is on PATH (or in common install dirs). */
-    fun isInstalled(): Boolean {
-        val home = System.getProperty("user.home")
-        val extraDirs = listOf("$home/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin")
-        val pathDirs = (System.getenv("PATH") ?: "").split(File.pathSeparator)
-        return (pathDirs + extraDirs).any { dir ->
-            dir.isNotBlank() && File(dir, binary).let { it.isFile && it.canExecute() }
-        }
-    }
+    fun isInstalled(): Boolean = binaryOnPath(binary)
 
     companion object {
+        /** True when [binary] is an executable file on PATH or a common install dir. */
+        fun binaryOnPath(binary: String): Boolean {
+            val home = System.getProperty("user.home")
+            val extraDirs = listOf("$home/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin")
+            val pathDirs = (System.getenv("PATH") ?: "").split(File.pathSeparator)
+            return (pathDirs + extraDirs).any { dir ->
+                dir.isNotBlank() && File(dir, binary).let { it.isFile && it.canExecute() }
+            }
+        }
+
         /** Strip characters that would break the double-quoted shell command. */
         fun sanitize(task: String?): String =
             (task ?: "")

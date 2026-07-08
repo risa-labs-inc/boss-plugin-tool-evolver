@@ -138,8 +138,17 @@ class EvolverTabViewModel(
     private val _actionLog = MutableStateFlow<List<String>>(emptyList())
     val actionLog: StateFlow<List<String>> = _actionLog.asStateFlow()
 
-    val agentAvailability: Map<CliAgent, Boolean> =
-        CliAgent.entries.associateWith { it.isInstalled() }
+    /**
+     * Which AI CLIs are actually installed — gates the agent buttons (a missing
+     * CLI can't be launched). Optimistic until the async check completes; refreshed
+     * with the target so installing a CLI mid-session is picked up on Refresh.
+     */
+    private val _agentAvailability = MutableStateFlow(CliAgent.entries.associateWith { true })
+    val agentAvailability: StateFlow<Map<CliAgent, Boolean>> = _agentAvailability.asStateFlow()
+
+    /** Whether git is installed — gates clone and worktree mode. */
+    private val _gitInstalled = MutableStateFlow(true)
+    val gitInstalled: StateFlow<Boolean> = _gitInstalled.asStateFlow()
 
     /**
      * Reactive gate for the evolve actions: true if the user is admin or holds
@@ -220,6 +229,8 @@ class EvolverTabViewModel(
 
     fun refreshTarget() {
         scope.launch(Dispatchers.IO) {
+            _agentAvailability.value = CliAgent.entries.associateWith { it.isInstalled() }
+            _gitInstalled.value = CliAgent.binaryOnPath("git")
             _target.value = services.findTool(targetPluginId)
             _isLoaded.value = services.loader?.isPluginLoaded(targetPluginId) ?: false
             _instances.value = services.loader?.getRunningInstanceCount(targetPluginId) ?: 0
@@ -314,6 +325,10 @@ class EvolverTabViewModel(
     /** Clone the plugin's repo into the chosen parent dir, then use it as the source. */
     fun cloneRepo() {
         if (_busy.value) return
+        if (!_gitInstalled.value) {
+            appendAction("Cloning requires git — install it and hit Refresh.")
+            return
+        }
         val target = _target.value ?: run {
             appendAction("Plugin is not loaded — cannot clone")
             return
@@ -374,6 +389,11 @@ class EvolverTabViewModel(
             services.toastError("Not permitted to evolve — needs ${EvolverServices.EVOLVE_PERMISSION}")
             return
         }
+        if (_agentAvailability.value[agent] != true) {
+            appendAction("${agent.displayName} CLI ('${agent.binary}') is not installed — install it and hit Refresh.")
+            services.toastError("${agent.binary} not found on PATH")
+            return
+        }
         if (_target.value == null) {
             appendAction("Plugin is not loaded — cannot evolve")
             return
@@ -409,6 +429,10 @@ class EvolverTabViewModel(
         return when (_evolveMode.value) {
             EvolveMode.NORMAL -> repo to null
             EvolveMode.WORKTREE -> {
+                if (!_gitInstalled.value) {
+                    appendAction("Worktree mode requires git — install it and hit Refresh.")
+                    return null
+                }
                 if (_worktreeSlug.value.isBlank()) {
                     appendAction("Enter a name for the worktree evolution first")
                     return null
