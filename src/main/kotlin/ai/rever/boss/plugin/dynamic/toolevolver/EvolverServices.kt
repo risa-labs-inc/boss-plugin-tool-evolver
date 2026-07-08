@@ -100,8 +100,26 @@ class EvolverServices(val context: PluginContext) {
         scope.cancel()
     }
 
+    /**
+     * Whether the current user may evolve (launch AI CLIs on plugin source).
+     * Admins bypass; otherwise the [EVOLVE_PERMISSION] must be held. If the host
+     * exposes no auth provider (e.g. a dev host without RBAC), allow — the MCP
+     * side is still gated via withRbac.
+     */
+    fun evolveAllowed(): Boolean {
+        val auth = context.authDataProvider ?: return true
+        return auth.isAdmin.value || auth.hasPermission(EVOLVE_PERMISSION)
+    }
+
     companion object {
         const val SELF_PLUGIN_ID = "ai.rever.boss.plugin.dynamic.toolevolver"
         private const val KEY_OPEN_LOCATION = "evolve_open_location"
+
+        /**
+         * Permission required to evolve a plugin (launch an AI CLI on its source,
+         * hot-reload, open PRs). The plugin-development capability held by the
+         * `boss_admin` role — the same gate the Tool Creator uses.
+         */
+        const val EVOLVE_PERMISSION = "plugins.admin.publish"
     }
 }

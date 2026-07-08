@@ -141,6 +141,26 @@ class EvolverTabViewModel(
     val agentAvailability: Map<CliAgent, Boolean> =
         CliAgent.entries.associateWith { it.isInstalled() }
 
+    /**
+     * Reactive gate for the evolve actions: true if the user is admin or holds
+     * [EvolverServices.EVOLVE_PERMISSION]. Drives button enable/disable. When the
+     * host exposes no auth provider, evolve is allowed (dev hosts without RBAC).
+     */
+    val canEvolve: StateFlow<Boolean> = run {
+        val auth = services.context.authDataProvider
+        if (auth == null) {
+            MutableStateFlow(true)
+        } else {
+            combine(auth.isAdmin, auth.userPermissions) { admin, perms ->
+                admin || EvolverServices.EVOLVE_PERMISSION in perms
+            }.stateIn(
+                scope,
+                SharingStarted.Eagerly,
+                auth.isAdmin.value || EvolverServices.EVOLVE_PERMISSION in auth.userPermissions.value,
+            )
+        }
+    }
+
     // ------------------------------------------------------------------ issue
 
     private val _issueTitle = MutableStateFlow("")
@@ -341,6 +361,11 @@ class EvolverTabViewModel(
     }
 
     fun launchEvolve(agent: CliAgent) {
+        if (!services.evolveAllowed()) {
+            appendAction("Evolving requires the '${EvolverServices.EVOLVE_PERMISSION}' permission — ask an admin to grant it.")
+            services.toastError("Not permitted to evolve — needs ${EvolverServices.EVOLVE_PERMISSION}")
+            return
+        }
         if (_target.value == null) {
             appendAction("Plugin is not loaded — cannot evolve")
             return
@@ -523,6 +548,10 @@ class EvolverTabViewModel(
 
     fun rebuildAndReload() {
         if (_busy.value) return
+        if (!services.evolveAllowed()) {
+            appendAction("Rebuild & hot reload requires the '${EvolverServices.EVOLVE_PERMISSION}' permission.")
+            return
+        }
         val repo = _repoPath.value?.let(::File) ?: run {
             appendAction("No source repo set")
             return

@@ -45,6 +45,7 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -331,6 +332,7 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
     val worktreeSlug by viewModel.worktreeSlug.collectAsState()
     val worktrees by viewModel.worktrees.collectAsState()
     val worktreeReady = evolveMode == EvolveMode.NORMAL || worktreeSlug.isNotBlank()
+    val canEvolve by viewModel.canEvolve.collectAsState()
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
@@ -469,6 +471,18 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
         Card(backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
             Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionTitle("Evolve with…")
+                if (!canEvolve) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        Icon(Icons.Default.Lock, null, tint = Amber, modifier = Modifier.size(13.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "Evolving is permission-gated. Ask an admin to grant you " +
+                                "“${EvolverServices.EVOLVE_PERMISSION}”. Probe and Issue stay available.",
+                            fontSize = 10.sp,
+                            color = Amber,
+                        )
+                    }
+                }
                 Text(
                     if (evolveMode == EvolveMode.WORKTREE)
                         "Creates/uses .worktrees/${worktreeSlug.ifBlank { "<name>" }} on its own branch, writes the evolve skill there, and opens the agent in a BossTerm tab."
@@ -481,7 +495,7 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                         AgentButton(
                             agent = agent,
                             installed = viewModel.agentAvailability[agent] == true,
-                            enabled = !busy && repoPath != null && worktreeReady,
+                            enabled = !busy && repoPath != null && worktreeReady && canEvolve,
                             onClick = { viewModel.launchEvolve(agent) },
                             modifier = Modifier.weight(1f),
                         )
@@ -490,7 +504,7 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = { viewModel.rebuildAndReload() },
-                        enabled = !busy && repoPath != null,
+                        enabled = !busy && repoPath != null && canEvolve,
                         colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary),
                     ) {
                         Icon(Icons.Default.PlayArrow, null, Modifier.size(14.dp))

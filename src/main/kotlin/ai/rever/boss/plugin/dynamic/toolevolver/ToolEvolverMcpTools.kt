@@ -68,7 +68,7 @@ class ToolEvolverMcpToolProvider(
                 else McpToolResult("Host does not expose split view operations", isError = true)
             },
         ),
-        McpToolDefinition(
+        McpToolDefinition.withRbac(
             name = "evolver_evolve",
             description = "Start evolving a plugin with an AI CLI: writes the evolve skill (with plugin context) into the plugin's source repo and opens a BossTerm tab there running the CLI. If no local checkout is found it clones the repo into the plugins umbrella first. Agents: claude, codex, gemini, opencode.",
             inputSchema = """{"type":"object","properties":{
@@ -78,6 +78,8 @@ class ToolEvolverMcpToolProvider(
                 "repo_path":{"type":"string","description":"Source repo path; omitted = auto-detected in the workspace"}
             },"required":["plugin_id"]}""".trimIndent(),
             readOnly = false,
+            // Gated: only exposed to users holding the plugin-development permission.
+            requiredPermissions = listOf(EvolverServices.EVOLVE_PERMISSION),
             handler = McpToolHandler { args ->
                 val pluginId = args.string("plugin_id")
                     ?: return@McpToolHandler McpToolResult("Missing required argument: plugin_id", isError = true)
