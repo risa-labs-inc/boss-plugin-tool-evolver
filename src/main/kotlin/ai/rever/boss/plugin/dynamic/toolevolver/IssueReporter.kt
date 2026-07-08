@@ -7,6 +7,9 @@ import java.util.concurrent.TimeUnit
 /** Readiness of the `gh` CLI for filing issues. */
 enum class GhStatus { NOT_INSTALLED, NOT_AUTHENTICATED, READY }
 
+/** A GitHub issue summary for the Issue tab's open-issues list. */
+data class IssueSummary(val number: Int, val title: String, val url: String)
+
 /**
  * Files a GitHub issue against an installed plugin's repo via the `gh` CLI.
  *
@@ -52,6 +55,28 @@ class IssueReporter(private val services: EvolverServices) {
         // gh prints the new issue URL on its own line.
         out.lineSequence().map { it.trim() }.lastOrNull { it.startsWith("https://") }
             ?: "Issue created on $slug"
+    }
+
+    /**
+     * Open issues for [slug] via `gh issue list` (uses gh's built-in jq to emit
+     * TSV, so no JSON dependency). Returns empty (not error) when gh isn't ready.
+     */
+    fun listOpenIssues(slug: String, limit: Int = 30): Result<List<IssueSummary>> = runCatching {
+        if (ghStatus() != GhStatus.READY) return@runCatching emptyList()
+        val (out, exit) = runGh(
+            listOf(
+                "issue", "list", "--repo", slug, "--state", "open", "--limit", limit.toString(),
+                "--json", "number,title,url", "--jq", ".[] | [.number, .title, .url] | @tsv",
+            )
+        )
+        if (exit != 0) error(out.trim().takeLast(300).ifBlank { "gh issue list failed" })
+        out.lineSequence().mapNotNull { line ->
+            if (line.isBlank()) return@mapNotNull null
+            val parts = line.split('\t')
+            if (parts.size < 3) return@mapNotNull null
+            val number = parts[0].toIntOrNull() ?: return@mapNotNull null
+            IssueSummary(number, parts[1], parts[2])
+        }.toList()
     }
 
     /**

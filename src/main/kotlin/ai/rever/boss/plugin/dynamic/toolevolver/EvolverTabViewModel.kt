@@ -182,6 +182,13 @@ class EvolverTabViewModel(
     private val _issueLog = MutableStateFlow<List<String>>(emptyList())
     val issueLog: StateFlow<List<String>> = _issueLog.asStateFlow()
 
+    /** Open issues on the target repo, shown below Activity. */
+    private val _openIssues = MutableStateFlow<List<IssueSummary>>(emptyList())
+    val openIssues: StateFlow<List<IssueSummary>> = _openIssues.asStateFlow()
+
+    private val _issuesLoading = MutableStateFlow(false)
+    val issuesLoading: StateFlow<Boolean> = _issuesLoading.asStateFlow()
+
     // Optimistic until the async check completes (avoids blocking UI on subprocesses).
     private val _ghStatus = MutableStateFlow(GhStatus.READY)
     val ghStatus: StateFlow<GhStatus> = _ghStatus.asStateFlow()
@@ -202,6 +209,7 @@ class EvolverTabViewModel(
                 if (_cloneUrl.value.isBlank()) _cloneUrl.value = services.evolveLauncher.guessGitUrl(target)
                 if (_issueRepo.value == null) _issueRepo.value = services.issueReporter.repoSlug(target)
                 refreshWorktrees()
+                refreshIssues()
             }
         }
     }
@@ -441,6 +449,35 @@ class EvolverTabViewModel(
         }
     }
 
+    /** Open [url] via the "Open Link" chooser (honoring a remembered choice). */
+    private fun openUrlChoosing(url: String, label: String) {
+        scope.launch {
+            val remembered = services.getRememberedOpenLocation()
+            if (remembered != null) openUrlAt(url, label, remembered)
+            else _pendingOpen.value = PendingOpen.OpenUrl(url, label)
+        }
+    }
+
+    /** Reload the open-issues list from the target repo. */
+    fun refreshIssues() {
+        val slug = _issueRepo.value?.takeUnless { it.isBlank() } ?: return
+        if (_issuesLoading.value) return
+        _issuesLoading.value = true
+        scope.launch(Dispatchers.IO) {
+            try {
+                services.issueReporter.listOpenIssues(slug).fold(
+                    onSuccess = { _openIssues.value = it },
+                    onFailure = { appendIssueLog("List issues failed: ${it.message}") },
+                )
+            } finally {
+                _issuesLoading.value = false
+            }
+        }
+    }
+
+    /** Open an existing issue through the "Open Link" chooser. */
+    fun openIssue(issue: IssueSummary) = openUrlChoosing(issue.url, "Issue #${issue.number}")
+
     private suspend fun doLaunch(agent: CliAgent, location: EvolveOpenLocation, dir: File, branch: String?) {
         val target = _target.value ?: return
         withContext(Dispatchers.IO) {
@@ -487,13 +524,10 @@ class EvolverTabViewModel(
                         services.toastSuccess("Issue filed on $slug")
                         _issueTitle.value = ""
                         _issueBody.value = ""
+                        refreshIssues()
                         // Open the new issue through the same "Open Link" chooser
                         // (honoring a remembered choice), so it can land in a split.
-                        if (url.startsWith("https://")) {
-                            val remembered = services.getRememberedOpenLocation()
-                            if (remembered != null) openUrlAt(url, "Issue", remembered)
-                            else _pendingOpen.value = PendingOpen.OpenUrl(url, "Issue")
-                        }
+                        if (url.startsWith("https://")) openUrlChoosing(url, "Issue")
                     },
                     onFailure = {
                         appendIssueLog("Failed: ${it.message}")

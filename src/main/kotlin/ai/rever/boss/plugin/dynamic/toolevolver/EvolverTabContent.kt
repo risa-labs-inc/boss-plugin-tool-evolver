@@ -678,6 +678,8 @@ internal fun IssueSection(viewModel: EvolverTabViewModel) {
     val busy by viewModel.issueBusy.collectAsState()
     val log by viewModel.issueLog.collectAsState()
     val ghStatus by viewModel.ghStatus.collectAsState()
+    val openIssues by viewModel.openIssues.collectAsState()
+    val issuesLoading by viewModel.issuesLoading.collectAsState()
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
@@ -779,6 +781,56 @@ internal fun IssueSection(viewModel: EvolverTabViewModel) {
                                 color = if (line.startsWith("Failed")) MaterialTheme.colors.error
                                 else MaterialTheme.colors.onSurface.copy(alpha = 0.85f),
                             )
+                        }
+                    }
+                }
+            }
+        }
+
+        // ----------------------------------------------------- open issues
+        Card(Modifier.fillMaxWidth(), backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
+            Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SectionTitle("Open issues")
+                    Spacer(Modifier.width(6.dp))
+                    Text("${openIssues.size}", fontSize = 10.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f))
+                    Spacer(Modifier.weight(1f))
+                    if (issuesLoading) CircularProgressIndicator(Modifier.size(13.dp), strokeWidth = 2.dp)
+                    IconButton(onClick = { viewModel.refreshIssues() }, enabled = !issuesLoading, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Refresh, "Refresh issues", tint = MaterialTheme.colors.onSurface.copy(alpha = 0.7f), modifier = Modifier.size(15.dp))
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                if (openIssues.isEmpty()) {
+                    Text(
+                        if (ghStatus == GhStatus.READY) "No open issues." else "Sign in to gh to list issues.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.4f),
+                    )
+                } else {
+                    LazyColumn(Modifier.fillMaxWidth().height(220.dp)) {
+                        items(openIssues, key = { it.number }) { issue ->
+                            Row(
+                                Modifier.fillMaxWidth()
+                                    .clickable { viewModel.openIssue(issue) }
+                                    .padding(vertical = 5.dp),
+                                verticalAlignment = Alignment.Top,
+                            ) {
+                                Text(
+                                    "#${issue.number}",
+                                    fontSize = 11.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = Amber,
+                                    modifier = Modifier.width(52.dp),
+                                )
+                                Text(
+                                    issue.title,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.9f),
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                         }
                     }
                 }
