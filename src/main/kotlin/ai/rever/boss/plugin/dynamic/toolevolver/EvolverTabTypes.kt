@@ -7,11 +7,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.TrendingUp
 
-// EVOLVE first so it is the default/leftmost tab (ordinal 0 = selected on open).
+// EVOLVE first so it is the default/leftmost tab (ordinal 0 = selected on open);
+// Issue second, Probe last.
 enum class EvolverSection(val label: String) {
     EVOLVE("Evolve"),
-    PROBE("Probe"),
     ISSUE("Issue"),
+    PROBE("Probe"),
 }
 
 object EvolverTabType : TabTypeInfo {
