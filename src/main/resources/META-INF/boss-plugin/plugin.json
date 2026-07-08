@@ -6,7 +6,7 @@
   "description": "Probe and evolve installed tools: per-plugin memory + leak signals + logs, and AI-driven evolution (Claude Code, Codex, Gemini, OpenCode) with hot reload and PR creation",
   "author": "Risa Labs",
   "apiVersion": "1.0.59",
-  "minBossVersion": "9.2.36",
+  "minBossVersion": "9.2.35",
   "mainClass": "ai.rever.boss.plugin.dynamic.toolevolver.ToolEvolverDynamicPlugin",
   "type": "mixed"
 }
