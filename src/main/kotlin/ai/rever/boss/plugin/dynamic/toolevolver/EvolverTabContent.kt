@@ -30,6 +30,9 @@ import compose.icons.feathericons.Columns
 import compose.icons.feathericons.ExternalLink
 import compose.icons.feathericons.PlusSquare
 import compose.icons.feathericons.Server
+import compose.icons.feathericons.Terminal
+import java.text.SimpleDateFormat
+import java.util.Date
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
@@ -536,6 +539,22 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
             Column(Modifier.fillMaxWidth().padding(14.dp)) {
                 SectionTitle("Activity")
                 Spacer(Modifier.height(6.dp))
+                // Launched sessions first: each row jumps back to its terminal tab.
+                val sessions by viewModel.sessions.collectAsState()
+                if (sessions.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        sessions.asReversed().forEach { (session, open) ->
+                            SessionRow(
+                                session = session,
+                                open = open,
+                                onFocus = { viewModel.focusSessionTerminal(session) },
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Divider(color = MaterialTheme.colors.onSurface.copy(alpha = 0.08f))
+                    Spacer(Modifier.height(8.dp))
+                }
                 if (actionLog.isEmpty()) {
                     Text(
                         "Nothing yet — pick an agent above to start an evolution.",
@@ -559,6 +578,48 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * One launched evolution session in the Activity card: agent + branch + start
+ * time, with a button that re-focuses the session's terminal tab (disabled
+ * once that tab has been closed).
+ */
+@Composable
+private fun SessionRow(session: EvolveSession, open: Boolean, onFocus: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth()
+            .clickable(enabled = open, onClick = onFocus)
+            .background(MaterialTheme.colors.onSurface.copy(alpha = 0.04f), CardShape)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            FeatherIcons.Terminal, null,
+            tint = if (open) Green else MaterialTheme.colors.onSurface.copy(alpha = 0.3f),
+            modifier = Modifier.size(13.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                session.agent.displayName + (session.branch?.let { "  ·  $it" } ?: ""),
+                fontSize = 11.sp,
+                color = MaterialTheme.colors.onSurface.copy(alpha = if (open) 0.9f else 0.5f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                "started " + remember(session.startedAtMs) {
+                    SimpleDateFormat("HH:mm").format(Date(session.startedAtMs))
+                } + if (open) "" else "  ·  terminal closed",
+                fontSize = 9.sp,
+                color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f),
+            )
+        }
+        OutlinedButton(onClick = onFocus, enabled = open) {
+            Text("Focus terminal", fontSize = 10.sp)
         }
     }
 }

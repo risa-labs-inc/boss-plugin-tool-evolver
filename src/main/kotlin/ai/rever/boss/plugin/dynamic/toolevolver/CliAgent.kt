@@ -12,11 +12,17 @@ import java.io.File
 enum class CliAgent(
     val displayName: String,
     val binary: String,
+    /**
+     * Flags that put the CLI in its hands-free "auto" mode so the evolve loop
+     * (edit → build → hot-reload via MCP) runs without approval prompts.
+     * OpenCode doesn't gate tools by default, so it needs none.
+     */
+    private val autoFlags: String,
 ) {
-    CLAUDE_CODE("Claude Code", "claude"),
-    CODEX("Codex", "codex"),
-    GEMINI("Gemini", "gemini"),
-    OPENCODE("OpenCode", "opencode");
+    CLAUDE_CODE("Claude Code", "claude", "--permission-mode auto"),
+    CODEX("Codex", "codex", "--sandbox workspace-write -a on-failure"),
+    GEMINI("Gemini", "gemini", "--approval-mode yolo"),
+    OPENCODE("OpenCode", "opencode", "");
 
     /**
      * Shell command that opens the CLI inside the plugin repo with the
@@ -26,14 +32,15 @@ enum class CliAgent(
     fun launchCommand(task: String? = null): String {
         val ask = sanitize(task)
         val suffix = if (ask.isEmpty()) "" else " Requested evolution: $ask"
+        val auto = if (autoFlags.isBlank()) "" else " $autoFlags"
         return when (this) {
             CLAUDE_CODE ->
-                if (ask.isEmpty()) "claude \"/evolve\""
-                else "claude \"/evolve $ask\""
+                if (ask.isEmpty()) "claude$auto \"/evolve\""
+                else "claude$auto \"/evolve $ask\""
             CODEX ->
-                "codex \"Load the evolve skill in .codex/skills/evolve/SKILL.md and follow it to evolve this plugin.$suffix\""
+                "codex$auto \"Load the evolve skill in .codex/skills/evolve/SKILL.md and follow it to evolve this plugin.$suffix\""
             GEMINI ->
-                "gemini -i \"Read .claude/skills/evolve/SKILL.md and follow it to evolve this plugin.$suffix\""
+                "gemini$auto -i \"Read .claude/skills/evolve/SKILL.md and follow it to evolve this plugin.$suffix\""
             OPENCODE ->
                 "opencode --prompt \"Follow the evolve command in .opencode/command/evolve.md to evolve this plugin.$suffix\""
         }

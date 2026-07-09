@@ -6,6 +6,10 @@ import ai.rever.boss.plugin.tab.terminal.TerminalTabInfo
 import ai.rever.boss.plugin.tab.terminal.TerminalTabType
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 /**
  * Where the evolve terminal opens — the "new tab vs split" choice, mirroring the
@@ -32,6 +36,18 @@ enum class EvolveMode { NORMAL, WORKTREE }
 data class WorktreeInfo(val slug: String, val path: String, val branch: String)
 
 /**
+ * One launched evolution: the CLI agent running in a BossTerm tab. Kept so the
+ * Activity list can jump back to (focus) that terminal tab later.
+ */
+data class EvolveSession(
+    val pluginId: String,
+    val agent: CliAgent,
+    val tabId: String,
+    val branch: String?,
+    val startedAtMs: Long,
+)
+
+/**
  * Starts an "evolution" of an installed plugin: writes the evolve skill
  * (with full plugin context) into the plugin's source repo in every supported
  * CLI's native format, then opens a BossTerm tab in that repo running the chosen
@@ -42,6 +58,10 @@ class EvolveLauncher(private val services: EvolverServices) {
 
     /** Session-scoped manual repo choices, keyed by pluginId. */
     private val repoOverrides = ConcurrentHashMap<String, String>()
+
+    /** Evolutions launched this app session (newest last), across all plugins. */
+    private val _sessions = MutableStateFlow<List<EvolveSession>>(emptyList())
+    val sessions: StateFlow<List<EvolveSession>> = _sessions.asStateFlow()
 
     fun setRepoOverride(pluginId: String, path: String) {
         repoOverrides[pluginId] = path
@@ -272,6 +292,15 @@ class EvolveLauncher(private val services: EvolverServices) {
             EvolveOpenLocation.EXISTING_SPLIT -> ops.openTabInSplit(tabInfo, TabSplitMode.EXISTING_SPLIT)
             EvolveOpenLocation.SPLIT_RIGHT -> ops.openTabInSplit(tabInfo, TabSplitMode.VERTICAL_SPLIT)
             EvolveOpenLocation.SPLIT_DOWN -> ops.openTabInSplit(tabInfo, TabSplitMode.HORIZONTAL_SPLIT)
+        }
+        _sessions.update {
+            (it + EvolveSession(
+                pluginId = info.pluginId,
+                agent = agent,
+                tabId = tabInfo.id,
+                branch = branch,
+                startedAtMs = System.currentTimeMillis(),
+            )).takeLast(50)
         }
         "Opened ${agent.displayName} on ${repoDir.absolutePath} (${location.label})"
     }
