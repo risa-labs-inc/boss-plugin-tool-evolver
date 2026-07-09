@@ -248,12 +248,20 @@ class EvolverTabViewModel(
         _sampling.value = true
         scope.launch(Dispatchers.IO) {
             try {
-                val prefix = _target.value?.let { services.memoryProbe.packagePrefixFor(it) } ?: targetPluginId
-                val snapshot = services.memoryProbe.snapshot(prefix)
-                if (snapshot != null) {
-                    _snapshots.update { (it + snapshot).takeLast(50) }
+                // Prefer the Performance plugin's shared probe (api ≥ 1.0.64): its
+                // history also carries samples taken from the Performance panel/MCP.
+                val viaPerformance = services.performanceProbe.sample(targetPluginId)
+                if (viaPerformance != null) {
+                    _snapshots.value = (services.performanceProbe.history(targetPluginId)
+                        ?: listOf(viaPerformance)).takeLast(50)
                 } else {
-                    appendAction("Memory histogram unavailable on this JVM")
+                    val prefix = _target.value?.let { services.memoryProbe.packagePrefixFor(it) } ?: targetPluginId
+                    val snapshot = services.memoryProbe.snapshot(prefix)
+                    if (snapshot != null) {
+                        _snapshots.update { (it + snapshot).takeLast(50) }
+                    } else {
+                        appendAction("Memory histogram unavailable on this JVM")
+                    }
                 }
                 _instances.value = services.loader?.getRunningInstanceCount(targetPluginId) ?: 0
                 _isLoaded.value = services.loader?.isPluginLoaded(targetPluginId) ?: false
