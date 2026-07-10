@@ -23,6 +23,7 @@ class EvolverServices(val context: PluginContext) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val memoryProbe = MemoryProbe()
+    val performanceProbe = PerformanceProbeClient(context)
     val evolveLauncher = EvolveLauncher(this)
     val hotReloader = HotReloader(this)
     val issueReporter = IssueReporter(this)

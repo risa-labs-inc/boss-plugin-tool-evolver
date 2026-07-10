@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "ai.rever.boss.plugin.dynamic"
-version = "0.3.3"
+version = "0.4.0"
 
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(17)) } }
 kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }

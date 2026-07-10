@@ -161,10 +161,15 @@ class ToolEvolverMcpToolProvider(
         if (target == null && !isLoaded) {
             return McpToolResult("No loaded plugin with id $pluginId (use evolver_list_tools)", isError = true)
         }
+        // Prefer the Performance plugin's shared probe (api ≥ 1.0.64) — one sample
+        // history across the Performance panel, its MCP tools, and this probe.
+        val viaPerformance = services.performanceProbe.sample(pluginId)
         val prefix = target?.let { services.memoryProbe.packagePrefixFor(it) } ?: pluginId
-        val snapshot = services.memoryProbe.snapshot(prefix)
+        val snapshot = viaPerformance ?: services.memoryProbe.snapshot(prefix)
+        val history = viaPerformance?.let { services.performanceProbe.history(pluginId) }
+            ?: listOfNotNull(snapshot)
         val instances = loader?.getRunningInstanceCount(pluginId) ?: 0
-        val signals = MemoryProbe.leakSignals(listOfNotNull(snapshot), isLoaded, instances)
+        val signals = MemoryProbe.leakSignals(history, isLoaded, instances)
         val logs = recentLogsFor(target?.displayName, pluginId, logLines)
         val text = buildString {
             target?.let { t ->
@@ -176,7 +181,8 @@ class ToolEvolverMcpToolProvider(
             if (snapshot == null) {
                 appendLine("Memory: histogram unavailable on this JVM")
             } else {
-                appendLine("Memory (live objects under $prefix, GC forced):")
+                val source = if (viaPerformance != null) "via Performance plugin" else "local histogram"
+                appendLine("Memory (live objects under ${snapshot.packagePrefix}, GC forced, $source):")
                 appendLine("  ${snapshot.instanceCount} instances of ${snapshot.classCount} classes, ${MemoryProbe.humanBytes(snapshot.totalBytes)} total")
                 snapshot.topClasses.take(8).forEach { c ->
                     appendLine("  ${MemoryProbe.humanBytes(c.bytes).padStart(10)}  ${c.instances.toString().padStart(8)}x  ${c.className}")
