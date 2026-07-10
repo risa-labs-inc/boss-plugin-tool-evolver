@@ -43,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -65,6 +66,10 @@ class ToolEvolverPanelViewModel(private val services: EvolverServices) {
     private val _search = MutableStateFlow("")
     val search: StateFlow<String> = _search.asStateFlow()
 
+    /** Filter for the panel's own tool list, independent of the picker's search. */
+    private val _panelQuery = MutableStateFlow("")
+    val panelQuery: StateFlow<String> = _panelQuery.asStateFlow()
+
     fun refresh() {
         services.scope.launch(Dispatchers.IO) { _tools.value = services.listTools() }
     }
@@ -81,6 +86,10 @@ class ToolEvolverPanelViewModel(private val services: EvolverServices) {
 
     fun setSearch(value: String) {
         _search.value = value
+    }
+
+    fun setPanelQuery(value: String) {
+        _panelQuery.value = value
     }
 
     fun openEvolver(info: LoadedPluginInfo) {
@@ -108,6 +117,14 @@ class ToolEvolverPanelComponent(
 private fun ToolEvolverPanelContent(viewModel: ToolEvolverPanelViewModel) {
     val tools by viewModel.tools.collectAsState()
     val showPicker by viewModel.showPicker.collectAsState()
+    val panelQuery by viewModel.panelQuery.collectAsState()
+    val filtered = remember(tools, panelQuery) {
+        if (panelQuery.isBlank()) tools
+        else tools.filter {
+            it.displayName.contains(panelQuery, ignoreCase = true) ||
+                it.pluginId.contains(panelQuery, ignoreCase = true)
+        }
+    }
 
     LaunchedEffect(Unit) { viewModel.refresh() }
 
@@ -115,17 +132,33 @@ private fun ToolEvolverPanelContent(viewModel: ToolEvolverPanelViewModel) {
         Column(Modifier.fillMaxSize()) {
             PanelHeader(viewModel)
             Divider(color = MaterialTheme.colors.onSurface.copy(alpha = 0.08f))
-            if (tools.isEmpty()) {
+            OutlinedTextField(
+                value = panelQuery,
+                onValueChange = viewModel::setPanelQuery,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                singleLine = true,
+                textStyle = TextStyle(fontSize = 12.sp),
+                placeholder = { Text("Search tools…", fontSize = 12.sp) },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Search, null,
+                        tint = MaterialTheme.colors.onSurface.copy(alpha = 0.5f),
+                        modifier = Modifier.size(14.dp),
+                    )
+                },
+            )
+            if (filtered.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        "No tools reported by the host",
+                        if (tools.isEmpty()) "No tools reported by the host"
+                        else "No tools match “$panelQuery”",
                         color = MaterialTheme.colors.onSurface.copy(alpha = 0.5f),
                         fontSize = 12.sp,
                     )
                 }
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {
-                    items(tools, key = { it.pluginId }) { tool ->
+                    items(filtered, key = { it.pluginId }) { tool ->
                         ToolRow(tool, onClick = { viewModel.openEvolver(tool) })
                     }
                 }
@@ -253,7 +286,7 @@ private fun ToolPickerOverlay(viewModel: ToolEvolverPanelViewModel) {
                     onValueChange = viewModel::setSearch,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
+                    textStyle = TextStyle(fontSize = 12.sp),
                     placeholder = { Text("Search tools…", fontSize = 12.sp) },
                     leadingIcon = {
                         Icon(
