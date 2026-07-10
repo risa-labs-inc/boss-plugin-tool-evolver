@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -335,6 +336,9 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
     val canEvolve by viewModel.canEvolve.collectAsState()
     val agentAvailability by viewModel.agentAvailability.collectAsState()
     val gitInstalled by viewModel.gitInstalled.collectAsState()
+    val openPrs by viewModel.openPrs.collectAsState()
+    val prsLoading by viewModel.prsLoading.collectAsState()
+    val ghStatus by viewModel.ghStatus.collectAsState()
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
@@ -555,6 +559,66 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                                 fontFamily = FontFamily.Monospace,
                                 color = MaterialTheme.colors.onSurface.copy(alpha = 0.85f),
                             )
+                        }
+                    }
+                }
+            }
+        }
+
+        // ------------------------------------------------------ open PRs
+        // Evolutions end in a PR (the evolve skill's ship-it step), so open
+        // PRs on the target repo are surfaced right where they originate.
+        Card(Modifier.fillMaxWidth(), backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
+            Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SectionTitle("Open pull requests")
+                    Spacer(Modifier.width(6.dp))
+                    Text("${openPrs.size}", fontSize = 10.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f))
+                    Spacer(Modifier.weight(1f))
+                    if (prsLoading) CircularProgressIndicator(Modifier.size(13.dp), strokeWidth = 2.dp)
+                    IconButton(onClick = { viewModel.refreshPrs() }, enabled = !prsLoading, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Refresh, "Refresh pull requests", tint = MaterialTheme.colors.onSurface.copy(alpha = 0.7f), modifier = Modifier.size(15.dp))
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                if (openPrs.isEmpty()) {
+                    Text(
+                        if (ghStatus == GhStatus.READY) "No open pull requests." else "Sign in to gh to list pull requests.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.4f),
+                    )
+                } else {
+                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 220.dp)) {
+                        items(openPrs, key = { it.number }) { pr ->
+                            Row(
+                                Modifier.fillMaxWidth()
+                                    .clickable { viewModel.openPr(pr) }
+                                    .padding(vertical = 5.dp),
+                                verticalAlignment = Alignment.Top,
+                            ) {
+                                Text(
+                                    "#${pr.number}",
+                                    fontSize = 11.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = Amber,
+                                    modifier = Modifier.width(52.dp),
+                                )
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        pr.title,
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.9f),
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        pr.branch,
+                                        fontSize = 10.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.5f),
+                                    )
+                                }
+                            }
                         }
                     }
                 }

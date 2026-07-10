@@ -10,6 +10,9 @@ enum class GhStatus { NOT_INSTALLED, NOT_AUTHENTICATED, READY }
 /** A GitHub issue summary for the Issue tab's open-issues list. */
 data class IssueSummary(val number: Int, val title: String, val url: String)
 
+/** A GitHub pull-request summary for the Evolve section's open-PRs card. */
+data class PrSummary(val number: Int, val title: String, val url: String, val branch: String)
+
 /**
  * Files a GitHub issue against an installed plugin's repo via the `gh` CLI.
  *
@@ -76,6 +79,29 @@ class IssueReporter(private val services: EvolverServices) {
             if (parts.size < 3) return@mapNotNull null
             val number = parts[0].toIntOrNull() ?: return@mapNotNull null
             IssueSummary(number, parts[1], parts[2])
+        }.toList()
+    }
+
+    /**
+     * Open pull requests targeting [slug] via `gh pr list` (same TSV trick as
+     * [listOpenIssues]). Returns empty (not error) when gh isn't ready.
+     */
+    fun listOpenPrs(slug: String, limit: Int = 30): Result<List<PrSummary>> = runCatching {
+        if (ghStatus() != GhStatus.READY) return@runCatching emptyList()
+        val (out, exit) = runGh(
+            listOf(
+                "pr", "list", "--repo", slug, "--state", "open", "--limit", limit.toString(),
+                "--json", "number,title,url,headRefName",
+                "--jq", ".[] | [.number, .title, .url, .headRefName] | @tsv",
+            )
+        )
+        if (exit != 0) error(out.trim().takeLast(300).ifBlank { "gh pr list failed" })
+        out.lineSequence().mapNotNull { line ->
+            if (line.isBlank()) return@mapNotNull null
+            val parts = line.split('\t')
+            if (parts.size < 4) return@mapNotNull null
+            val number = parts[0].toIntOrNull() ?: return@mapNotNull null
+            PrSummary(number, parts[1], parts[2], parts[3])
         }.toList()
     }
 

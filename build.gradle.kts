@@ -7,14 +7,16 @@ plugins {
 }
 
 group = "ai.rever.boss.plugin.dynamic"
-version = "0.4.1"
+version = "0.4.2"
 
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(17)) } }
 kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
 
 // Auto-detect CI environment
 val useLocalDependencies = System.getenv("CI") != "true"
-val bossPluginApiPath = "../boss-plugin-api"
+// Sibling repo in the workspace; from a .worktrees/<slug> checkout it sits three levels up.
+val bossPluginApiPath = listOf("../boss-plugin-api", "../../../boss-plugin-api")
+    .firstOrNull { file(it).isDirectory } ?: "../boss-plugin-api"
 
 repositories {
     google()

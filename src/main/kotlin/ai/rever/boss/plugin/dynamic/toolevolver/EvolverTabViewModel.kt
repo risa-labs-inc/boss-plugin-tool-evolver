@@ -138,6 +138,13 @@ class EvolverTabViewModel(
     private val _actionLog = MutableStateFlow<List<String>>(emptyList())
     val actionLog: StateFlow<List<String>> = _actionLog.asStateFlow()
 
+    /** Open PRs on the target repo, shown at the bottom of the Evolve section. */
+    private val _openPrs = MutableStateFlow<List<PrSummary>>(emptyList())
+    val openPrs: StateFlow<List<PrSummary>> = _openPrs.asStateFlow()
+
+    private val _prsLoading = MutableStateFlow(false)
+    val prsLoading: StateFlow<Boolean> = _prsLoading.asStateFlow()
+
     /**
      * Which AI CLIs are actually installed — gates the agent buttons (a missing
      * CLI can't be launched). Optimistic until the async check completes; refreshed
@@ -219,6 +226,7 @@ class EvolverTabViewModel(
                 if (_issueRepo.value == null) _issueRepo.value = services.issueReporter.repoSlug(target)
                 refreshWorktrees()
                 refreshIssues()
+                refreshPrs()
             }
         }
     }
@@ -509,6 +517,26 @@ class EvolverTabViewModel(
 
     /** Open an existing issue through the "Open Link" chooser. */
     fun openIssue(issue: IssueSummary) = openUrlChoosing(issue.url, "Issue #${issue.number}")
+
+    /** Reload the open-PRs list from the target repo. */
+    fun refreshPrs() {
+        val slug = _issueRepo.value?.takeUnless { it.isBlank() } ?: return
+        if (_prsLoading.value) return
+        _prsLoading.value = true
+        scope.launch(Dispatchers.IO) {
+            try {
+                services.issueReporter.listOpenPrs(slug).fold(
+                    onSuccess = { _openPrs.value = it },
+                    onFailure = { appendAction("List PRs failed: ${it.message}") },
+                )
+            } finally {
+                _prsLoading.value = false
+            }
+        }
+    }
+
+    /** Open an existing PR through the "Open Link" chooser. */
+    fun openPr(pr: PrSummary) = openUrlChoosing(pr.url, "PR #${pr.number}")
 
     private suspend fun doLaunch(agent: CliAgent, location: EvolveOpenLocation, dir: File, branch: String?) {
         val target = _target.value ?: return
