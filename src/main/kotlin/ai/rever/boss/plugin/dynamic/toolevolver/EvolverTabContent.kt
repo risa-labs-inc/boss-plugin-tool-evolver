@@ -335,7 +335,11 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
     val evolveMode by viewModel.evolveMode.collectAsState()
     val worktreeSlug by viewModel.worktreeSlug.collectAsState()
     val worktrees by viewModel.worktrees.collectAsState()
-    val worktreeReady = evolveMode == EvolveMode.NORMAL || worktreeSlug.isNotBlank()
+    // The slug the launcher will actually use — filter matching, the target
+    // highlight, and all shown paths go through it so the UI never advertises
+    // a dir/branch that differs from what launching creates or reuses.
+    val slugPreview = remember(worktreeSlug) { viewModel.slugify(worktreeSlug) }
+    val targetedWorktree = remember(worktrees, slugPreview) { worktrees.firstOrNull { it.slug == slugPreview } }
     val canEvolve by viewModel.canEvolve.collectAsState()
     val agentAvailability by viewModel.agentAvailability.collectAsState()
     val gitInstalled by viewModel.gitInstalled.collectAsState()
@@ -429,7 +433,12 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                     ) { viewModel.setEvolveMode(EvolveMode.NORMAL) }
                     ModeChip(
                         title = "Worktree",
-                        subtitle = if (gitInstalled) "Isolated branch — evolve in parallel" else "Requires git (not installed)",
+                        subtitle = when {
+                            !gitInstalled -> "Requires git (not installed)"
+                            evolveMode == EvolveMode.WORKTREE && slugPreview.isEmpty() ->
+                                "No worktree named — runs in this checkout"
+                            else -> "Isolated branch — evolve in parallel"
+                        },
                         selected = evolveMode == EvolveMode.WORKTREE,
                         enabled = gitInstalled,
                         modifier = Modifier.weight(1f),
@@ -442,19 +451,50 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         textStyle = TextStyle(fontSize = 12.sp),
-                        label = { Text("Feature / issue name → .worktrees/<slug> on evolve/<slug>", fontSize = 10.sp) },
+                        label = { Text("Optional: search worktrees or name a new one → .worktrees/<slug> on evolve/<slug>", fontSize = 10.sp) },
                         placeholder = { Text("e.g. dark-mode or fix-crash", fontSize = 11.sp) },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Search, null,
+                                tint = MaterialTheme.colors.onSurface.copy(alpha = 0.5f),
+                                modifier = Modifier.size(14.dp),
+                            )
+                        },
                     )
+                    val filteredWorktrees = remember(worktrees, worktreeSlug, slugPreview) {
+                        val query = worktreeSlug.trim()
+                        when {
+                            query.isEmpty() -> worktrees
+                            // An exact target is picked (tapped or typed): keep the
+                            // whole list visible so other worktrees stay reachable.
+                            worktrees.any { it.slug == slugPreview } -> worktrees
+                            // Match the raw text and its slugified form, so e.g.
+                            // "Dark Mode" still finds the on-disk slug "dark-mode".
+                            else -> worktrees.filter {
+                                it.slug.contains(query, ignoreCase = true) ||
+                                    it.branch.contains(query, ignoreCase = true) ||
+                                    (slugPreview.isNotEmpty() && it.slug.contains(slugPreview, ignoreCase = true))
+                            }
+                        }
+                    }
                     if (worktrees.isEmpty()) {
                         Text(
-                            "No worktrees yet — name one above and pick an agent to create it.",
+                            "No worktrees yet — leave blank to evolve this checkout, or name one to create it.",
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f),
+                        )
+                    } else if (filteredWorktrees.isEmpty()) {
+                        Text(
+                            if (slugPreview.isEmpty())
+                                "No matching worktrees — clear the name to evolve this checkout instead."
+                            else "No matching worktrees — evolving creates .worktrees/$slugPreview on evolve/$slugPreview.",
                             fontSize = 10.sp,
                             color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f),
                         )
                     } else {
                         Text("Active worktrees (tap to target)", fontSize = 10.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f))
-                        worktrees.forEach { wt ->
-                            val active = worktreeSlug.isNotBlank() && wt.slug == worktreeSlug
+                        filteredWorktrees.forEach { wt ->
+                            val active = wt.slug == slugPreview && slugPreview.isNotEmpty()
                             Row(
                                 Modifier.fillMaxWidth()
                                     .clickable { viewModel.setWorktreeSlug(wt.slug) }
@@ -495,9 +535,15 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                     }
                 }
                 Text(
-                    if (evolveMode == EvolveMode.WORKTREE)
-                        "Creates/uses .worktrees/${worktreeSlug.ifBlank { "<name>" }} on its own branch, writes the evolve skill there, and opens the agent in a BossTerm tab."
-                    else "Writes the evolve skill (plugin context, hot-reload + PR workflow) into the repo and opens the agent in a BossTerm tab.",
+                    when {
+                        evolveMode == EvolveMode.WORKTREE && slugPreview.isEmpty() ->
+                            "No worktree selected — evolves this checkout directly. Search or name one above to isolate the evolution."
+                        evolveMode == EvolveMode.WORKTREE && targetedWorktree != null ->
+                            "Uses existing worktree .worktrees/${targetedWorktree.slug} (${targetedWorktree.branch.ifBlank { "detached" }}), writes the evolve skill there, and opens the agent in a BossTerm tab."
+                        evolveMode == EvolveMode.WORKTREE ->
+                            "Creates .worktrees/$slugPreview on evolve/$slugPreview, writes the evolve skill there, and opens the agent in a BossTerm tab."
+                        else -> "Writes the evolve skill (plugin context, hot-reload + PR workflow) into the repo and opens the agent in a BossTerm tab."
+                    },
                     fontSize = 10.sp,
                     color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f),
                 )
@@ -509,7 +555,7 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                             installed = installed,
                             // Gated on the CLI actually being installed — a missing
                             // binary can't be launched, so the button is disabled.
-                            enabled = !busy && repoPath != null && worktreeReady && canEvolve && installed,
+                            enabled = !busy && repoPath != null && canEvolve && installed,
                             onClick = { viewModel.launchEvolve(agent) },
                             modifier = Modifier.weight(1f),
                         )

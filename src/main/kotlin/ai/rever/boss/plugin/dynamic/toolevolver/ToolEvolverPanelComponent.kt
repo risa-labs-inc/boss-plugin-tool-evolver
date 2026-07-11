@@ -43,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -65,6 +66,10 @@ class ToolEvolverPanelViewModel(private val services: EvolverServices) {
     private val _search = MutableStateFlow("")
     val search: StateFlow<String> = _search.asStateFlow()
 
+    /** Filter for the panel's own tool list, independent of the picker's search. */
+    private val _panelQuery = MutableStateFlow("")
+    val panelQuery: StateFlow<String> = _panelQuery.asStateFlow()
+
     fun refresh() {
         services.scope.launch(Dispatchers.IO) { _tools.value = services.listTools() }
     }
@@ -81,6 +86,10 @@ class ToolEvolverPanelViewModel(private val services: EvolverServices) {
 
     fun setSearch(value: String) {
         _search.value = value
+    }
+
+    fun setPanelQuery(value: String) {
+        _panelQuery.value = value
     }
 
     fun openEvolver(info: LoadedPluginInfo) {
@@ -104,10 +113,40 @@ class ToolEvolverPanelComponent(
     }
 }
 
+/** Case-insensitive tool search over display name and plugin id (query trimmed). */
+private fun List<LoadedPluginInfo>.matching(query: String): List<LoadedPluginInfo> {
+    val q = query.trim()
+    return if (q.isEmpty()) this else filter {
+        it.displayName.contains(q, ignoreCase = true) ||
+            it.pluginId.contains(q, ignoreCase = true)
+    }
+}
+
+@Composable
+private fun ToolSearchField(value: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier,
+        singleLine = true,
+        textStyle = TextStyle(fontSize = 12.sp),
+        placeholder = { Text("Search tools…", fontSize = 12.sp) },
+        leadingIcon = {
+            Icon(
+                Icons.Default.Search, null,
+                tint = MaterialTheme.colors.onSurface.copy(alpha = 0.5f),
+                modifier = Modifier.size(14.dp),
+            )
+        },
+    )
+}
+
 @Composable
 private fun ToolEvolverPanelContent(viewModel: ToolEvolverPanelViewModel) {
     val tools by viewModel.tools.collectAsState()
     val showPicker by viewModel.showPicker.collectAsState()
+    val panelQuery by viewModel.panelQuery.collectAsState()
+    val filtered = remember(tools, panelQuery) { tools.matching(panelQuery) }
 
     LaunchedEffect(Unit) { viewModel.refresh() }
 
@@ -115,17 +154,23 @@ private fun ToolEvolverPanelContent(viewModel: ToolEvolverPanelViewModel) {
         Column(Modifier.fillMaxSize()) {
             PanelHeader(viewModel)
             Divider(color = MaterialTheme.colors.onSurface.copy(alpha = 0.08f))
-            if (tools.isEmpty()) {
+            ToolSearchField(
+                value = panelQuery,
+                onValueChange = viewModel::setPanelQuery,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+            )
+            if (filtered.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        "No tools reported by the host",
+                        if (tools.isEmpty()) "No tools reported by the host"
+                        else "No tools match “${panelQuery.trim()}”",
                         color = MaterialTheme.colors.onSurface.copy(alpha = 0.5f),
                         fontSize = 12.sp,
                     )
                 }
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {
-                    items(tools, key = { it.pluginId }) { tool ->
+                    items(filtered, key = { it.pluginId }) { tool ->
                         ToolRow(tool, onClick = { viewModel.openEvolver(tool) })
                     }
                 }
@@ -220,13 +265,7 @@ private fun ToolRow(tool: LoadedPluginInfo, onClick: () -> Unit) {
 private fun ToolPickerOverlay(viewModel: ToolEvolverPanelViewModel) {
     val tools by viewModel.tools.collectAsState()
     val search by viewModel.search.collectAsState()
-    val filtered = remember(tools, search) {
-        if (search.isBlank()) tools
-        else tools.filter {
-            it.displayName.contains(search, ignoreCase = true) ||
-                it.pluginId.contains(search, ignoreCase = true)
-        }
-    }
+    val filtered = remember(tools, search) { tools.matching(search) }
     Box(
         Modifier.fillMaxSize()
             .background(Color.Black.copy(alpha = 0.45f))
@@ -248,20 +287,10 @@ private fun ToolPickerOverlay(viewModel: ToolEvolverPanelViewModel) {
                     color = MaterialTheme.colors.onSurface,
                 )
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
+                ToolSearchField(
                     value = search,
                     onValueChange = viewModel::setSearch,
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
-                    placeholder = { Text("Search tools…", fontSize = 12.sp) },
-                    leadingIcon = {
-                        Icon(
-                            Icons.Default.Search, null,
-                            tint = MaterialTheme.colors.onSurface.copy(alpha = 0.5f),
-                            modifier = Modifier.size(14.dp),
-                        )
-                    },
                 )
                 Spacer(Modifier.height(8.dp))
                 LazyColumn(

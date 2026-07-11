@@ -113,7 +113,11 @@ class EvolverTabViewModel(
     private val _evolveMode = MutableStateFlow(EvolveMode.NORMAL)
     val evolveMode: StateFlow<EvolveMode> = _evolveMode.asStateFlow()
 
-    /** Feature/issue name for a new worktree (slugified to the evolve/<slug> branch). */
+    /**
+     * Feature/issue name for a worktree (slugified to the evolve/<slug> branch).
+     * Doubles as the search filter over existing worktrees; optional — blank
+     * evolves the checkout directly.
+     */
     private val _worktreeSlug = MutableStateFlow("")
     val worktreeSlug: StateFlow<String> = _worktreeSlug.asStateFlow()
 
@@ -391,6 +395,12 @@ class EvolverTabViewModel(
 
     fun setWorktreeSlug(value: String) { _worktreeSlug.value = value }
 
+    /**
+     * The slug the launcher will actually use for [name] — lets the UI show the
+     * real target dir/branch and match typed names against existing worktrees.
+     */
+    fun slugify(name: String): String = services.evolveLauncher.slugify(name)
+
     fun refreshWorktrees() {
         val repo = _repoPath.value?.let(::File) ?: return
         scope.launch(Dispatchers.IO) { _worktrees.value = services.evolveLauncher.listWorktrees(repo) }
@@ -476,15 +486,15 @@ class EvolverTabViewModel(
         return when (_evolveMode.value) {
             EvolveMode.NORMAL -> repo to null
             EvolveMode.WORKTREE -> {
+                // The worktree is optional: with no usable name/selection (blank, or
+                // punctuation-only input that slugifies to nothing) the evolution
+                // runs in the checkout itself, same as Normal mode.
+                val slug = services.evolveLauncher.slugify(_worktreeSlug.value)
+                if (slug.isBlank()) return repo to null
                 if (!_gitInstalled.value) {
                     appendAction("Worktree mode requires git — install it and hit Refresh.")
                     return null
                 }
-                if (_worktreeSlug.value.isBlank()) {
-                    appendAction("Enter a name for the worktree evolution first")
-                    return null
-                }
-                val slug = services.evolveLauncher.slugify(_worktreeSlug.value)
                 withContext(Dispatchers.IO) { services.evolveLauncher.ensureWorktree(repo, slug, ::appendAction) }.fold(
                     onSuccess = { dir -> refreshWorktrees(); dir to "evolve/$slug" },
                     onFailure = { appendAction("Worktree failed: ${it.message}"); null },
