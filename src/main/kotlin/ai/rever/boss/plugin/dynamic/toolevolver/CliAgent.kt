@@ -50,15 +50,24 @@ enum class CliAgent(
     fun isInstalled(): Boolean = binaryOnPath(binary)
 
     companion object {
-        /** True when [binary] is an executable file on PATH or a common install dir. */
-        fun binaryOnPath(binary: String): Boolean {
+        /**
+         * Absolute path of [binary] on PATH or a common install dir, or null.
+         * ProcessBuilder resolves bare command names against the PARENT's PATH,
+         * which is nearly empty when the packaged host launches from Finder —
+         * callers must pass this resolved path instead of the bare name.
+         */
+        fun resolveBinary(binary: String): File? {
             val home = System.getProperty("user.home")
             val extraDirs = listOf("$home/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin")
             val pathDirs = (System.getenv("PATH") ?: "").split(File.pathSeparator)
-            return (pathDirs + extraDirs).any { dir ->
-                dir.isNotBlank() && File(dir, binary).let { it.isFile && it.canExecute() }
-            }
+            return (pathDirs + extraDirs).asSequence()
+                .filter { it.isNotBlank() }
+                .map { File(it, binary) }
+                .firstOrNull { it.isFile && it.canExecute() }
         }
+
+        /** True when [binary] is an executable file on PATH or a common install dir. */
+        fun binaryOnPath(binary: String): Boolean = resolveBinary(binary) != null
 
         /** Strip characters that would break the double-quoted shell command. */
         fun sanitize(task: String?): String =

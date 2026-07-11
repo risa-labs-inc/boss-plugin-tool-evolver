@@ -146,8 +146,11 @@ class EvolveLauncher(private val services: EvolverServices) {
         dir
     }
 
+    /** git resolved to an absolute path — ProcessBuilder ignores the widened child PATH. */
+    private fun gitExe(): String = CliAgent.resolveBinary("git")?.absolutePath ?: "git"
+
     private fun runGit(dir: File, args: List<String>, onLine: (String) -> Unit): Result<Unit> = runCatching {
-        val process = ProcessBuilder(listOf("git") + args)
+        val process = ProcessBuilder(listOf(gitExe()) + args)
             .directory(dir)
             .redirectErrorStream(true)
             .also { pb ->
@@ -247,7 +250,7 @@ class EvolveLauncher(private val services: EvolverServices) {
 
     private fun runGitCapture(dir: File, args: List<String>): Pair<String, Int> {
         return try {
-            val process = ProcessBuilder(listOf("git") + args)
+            val process = ProcessBuilder(listOf(gitExe()) + args)
                 .directory(dir)
                 .redirectErrorStream(true)
                 .also { pb ->
