@@ -335,6 +335,11 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
     val evolveMode by viewModel.evolveMode.collectAsState()
     val worktreeSlug by viewModel.worktreeSlug.collectAsState()
     val worktrees by viewModel.worktrees.collectAsState()
+    // The slug the launcher will actually use — filter matching, the target
+    // highlight, and all shown paths go through it so the UI never advertises
+    // a dir/branch that differs from what launching creates or reuses.
+    val slugPreview = remember(worktreeSlug) { viewModel.slugify(worktreeSlug) }
+    val targetedWorktree = remember(worktrees, slugPreview) { worktrees.firstOrNull { it.slug == slugPreview } }
     val canEvolve by viewModel.canEvolve.collectAsState()
     val agentAvailability by viewModel.agentAvailability.collectAsState()
     val gitInstalled by viewModel.gitInstalled.collectAsState()
@@ -428,7 +433,12 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                     ) { viewModel.setEvolveMode(EvolveMode.NORMAL) }
                     ModeChip(
                         title = "Worktree",
-                        subtitle = if (gitInstalled) "Isolated branch — evolve in parallel" else "Requires git (not installed)",
+                        subtitle = when {
+                            !gitInstalled -> "Requires git (not installed)"
+                            evolveMode == EvolveMode.WORKTREE && slugPreview.isEmpty() ->
+                                "No worktree named — runs in this checkout"
+                            else -> "Isolated branch — evolve in parallel"
+                        },
                         selected = evolveMode == EvolveMode.WORKTREE,
                         enabled = gitInstalled,
                         modifier = Modifier.weight(1f),
@@ -451,12 +461,20 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                             )
                         },
                     )
-                    val filteredWorktrees = remember(worktrees, worktreeSlug) {
+                    val filteredWorktrees = remember(worktrees, worktreeSlug, slugPreview) {
                         val query = worktreeSlug.trim()
-                        if (query.isEmpty()) worktrees
-                        else worktrees.filter {
-                            it.slug.contains(query, ignoreCase = true) ||
-                                it.branch.contains(query, ignoreCase = true)
+                        when {
+                            query.isEmpty() -> worktrees
+                            // An exact target is picked (tapped or typed): keep the
+                            // whole list visible so other worktrees stay reachable.
+                            worktrees.any { it.slug == slugPreview } -> worktrees
+                            // Match the raw text and its slugified form, so e.g.
+                            // "Dark Mode" still finds the on-disk slug "dark-mode".
+                            else -> worktrees.filter {
+                                it.slug.contains(query, ignoreCase = true) ||
+                                    it.branch.contains(query, ignoreCase = true) ||
+                                    (slugPreview.isNotEmpty() && it.slug.contains(slugPreview, ignoreCase = true))
+                            }
                         }
                     }
                     if (worktrees.isEmpty()) {
@@ -467,14 +485,16 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                         )
                     } else if (filteredWorktrees.isEmpty()) {
                         Text(
-                            "No matching worktrees — evolving creates .worktrees/${worktreeSlug.trim()}.",
+                            if (slugPreview.isEmpty())
+                                "No matching worktrees — clear the name to evolve this checkout instead."
+                            else "No matching worktrees — evolving creates .worktrees/$slugPreview on evolve/$slugPreview.",
                             fontSize = 10.sp,
                             color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f),
                         )
                     } else {
                         Text("Active worktrees (tap to target)", fontSize = 10.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f))
                         filteredWorktrees.forEach { wt ->
-                            val active = worktreeSlug.isNotBlank() && wt.slug == worktreeSlug
+                            val active = wt.slug == slugPreview && slugPreview.isNotEmpty()
                             Row(
                                 Modifier.fillMaxWidth()
                                     .clickable { viewModel.setWorktreeSlug(wt.slug) }
@@ -516,10 +536,12 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                 }
                 Text(
                     when {
-                        evolveMode == EvolveMode.WORKTREE && worktreeSlug.isBlank() ->
+                        evolveMode == EvolveMode.WORKTREE && slugPreview.isEmpty() ->
                             "No worktree selected — evolves this checkout directly. Search or name one above to isolate the evolution."
+                        evolveMode == EvolveMode.WORKTREE && targetedWorktree != null ->
+                            "Uses existing worktree .worktrees/${targetedWorktree.slug} (${targetedWorktree.branch.ifBlank { "detached" }}), writes the evolve skill there, and opens the agent in a BossTerm tab."
                         evolveMode == EvolveMode.WORKTREE ->
-                            "Creates/uses .worktrees/${worktreeSlug} on its own branch, writes the evolve skill there, and opens the agent in a BossTerm tab."
+                            "Creates .worktrees/$slugPreview on evolve/$slugPreview, writes the evolve skill there, and opens the agent in a BossTerm tab."
                         else -> "Writes the evolve skill (plugin context, hot-reload + PR workflow) into the repo and opens the agent in a BossTerm tab."
                     },
                     fontSize = 10.sp,

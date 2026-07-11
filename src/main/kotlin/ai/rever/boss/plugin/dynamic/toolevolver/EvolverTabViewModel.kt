@@ -395,6 +395,12 @@ class EvolverTabViewModel(
 
     fun setWorktreeSlug(value: String) { _worktreeSlug.value = value }
 
+    /**
+     * The slug the launcher will actually use for [name] — lets the UI show the
+     * real target dir/branch and match typed names against existing worktrees.
+     */
+    fun slugify(name: String): String = services.evolveLauncher.slugify(name)
+
     fun refreshWorktrees() {
         val repo = _repoPath.value?.let(::File) ?: return
         scope.launch(Dispatchers.IO) { _worktrees.value = services.evolveLauncher.listWorktrees(repo) }
@@ -480,14 +486,15 @@ class EvolverTabViewModel(
         return when (_evolveMode.value) {
             EvolveMode.NORMAL -> repo to null
             EvolveMode.WORKTREE -> {
-                // The worktree is optional: with no name/selection the evolution
+                // The worktree is optional: with no usable name/selection (blank, or
+                // punctuation-only input that slugifies to nothing) the evolution
                 // runs in the checkout itself, same as Normal mode.
-                if (_worktreeSlug.value.isBlank()) return repo to null
+                val slug = services.evolveLauncher.slugify(_worktreeSlug.value)
+                if (slug.isBlank()) return repo to null
                 if (!_gitInstalled.value) {
                     appendAction("Worktree mode requires git — install it and hit Refresh.")
                     return null
                 }
-                val slug = services.evolveLauncher.slugify(_worktreeSlug.value)
                 withContext(Dispatchers.IO) { services.evolveLauncher.ensureWorktree(repo, slug, ::appendAction) }.fold(
                     onSuccess = { dir -> refreshWorktrees(); dir to "evolve/$slug" },
                     onFailure = { appendAction("Worktree failed: ${it.message}"); null },
