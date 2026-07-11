@@ -2,6 +2,7 @@ package ai.rever.boss.plugin.dynamic.toolevolver
 
 import ai.rever.boss.plugin.api.LoadedPluginInfo
 import java.io.File
+import java.io.StringWriter
 import java.util.concurrent.TimeUnit
 
 /** Readiness of the `gh` CLI for filing issues. */
@@ -14,12 +15,13 @@ data class IssueSummary(val number: Int, val title: String, val url: String)
 data class PrSummary(val number: Int, val title: String, val url: String, val branch: String)
 
 /**
- * Files a GitHub issue against an installed plugin's repo via the `gh` CLI.
+ * GitHub operations against an installed plugin's repo via the `gh` CLI:
+ * filing issues and listing open issues / pull requests.
  *
  * The target `owner/repo` is resolved from the plugin's local checkout's origin
  * remote when one is found, otherwise from [EvolveLauncher.guessGitUrl] (its
  * manifest url, else the house `risa-labs-inc/boss-plugin-<slug>` convention).
- * `gh issue create --repo <slug>` works without a local checkout.
+ * All commands pass `--repo <slug>`, so no local checkout is needed.
  */
 class IssueReporter(private val services: EvolverServices) {
 
@@ -61,48 +63,81 @@ class IssueReporter(private val services: EvolverServices) {
     }
 
     /**
-     * Open issues for [slug] via `gh issue list` (uses gh's built-in jq to emit
-     * TSV, so no JSON dependency). Returns empty (not error) when gh isn't ready.
+     * Open issues for [slug] via `gh issue list`. Returns empty (not error) when
+     * gh isn't ready. Pass an already-probed [status] to skip the extra
+     * `gh auth status` subprocess.
      */
-    fun listOpenIssues(slug: String, limit: Int = 30): Result<List<IssueSummary>> = runCatching {
-        if (ghStatus() != GhStatus.READY) return@runCatching emptyList()
+    fun listOpenIssues(slug: String, limit: Int = 30, status: GhStatus = ghStatus()): Result<List<IssueSummary>> =
+        listOpenTsv("issue", slug, limit, status, fields = "number,title,url") { parts ->
+            parts[0].toIntOrNull()?.let { IssueSummary(it, parts[1], parts[2]) }
+        }
+
+    /**
+     * Open pull requests targeting [slug] via `gh pr list`. Returns empty (not
+     * error) when gh isn't ready. Pass an already-probed [status] to skip the
+     * extra `gh auth status` subprocess.
+     */
+    fun listOpenPrs(slug: String, limit: Int = 30, status: GhStatus = ghStatus()): Result<List<PrSummary>> =
+        listOpenTsv("pr", slug, limit, status, fields = "number,title,url,headRefName") { parts ->
+            parts[0].toIntOrNull()?.let { PrSummary(it, parts[1], parts[2], parts[3]) }
+        }
+
+    /**
+     * Shared `gh <kind> list` runner: emits [fields] as TSV via gh's built-in jq
+     * (no JSON dependency), splits columns, and un-escapes @tsv's in-field
+     * escapes before handing each row to [build].
+     */
+    private fun <T> listOpenTsv(
+        kind: String,
+        slug: String,
+        limit: Int,
+        status: GhStatus,
+        fields: String,
+        build: (List<String>) -> T?,
+    ): Result<List<T>> = runCatching {
+        if (status != GhStatus.READY) return@runCatching emptyList()
+        val names = fields.split(',')
         val (out, exit) = runGh(
             listOf(
-                "issue", "list", "--repo", slug, "--state", "open", "--limit", limit.toString(),
-                "--json", "number,title,url", "--jq", ".[] | [.number, .title, .url] | @tsv",
+                kind, "list", "--repo", slug, "--state", "open", "--limit", limit.toString(),
+                "--json", fields,
+                "--jq", ".[] | [${names.joinToString(", ") { ".$it" }}] | @tsv",
             )
         )
-        if (exit != 0) error(out.trim().takeLast(300).ifBlank { "gh issue list failed" })
+        if (exit != 0) error(out.trim().takeLast(300).ifBlank { "gh $kind list failed" })
         out.lineSequence().mapNotNull { line ->
             if (line.isBlank()) return@mapNotNull null
             val parts = line.split('\t')
-            if (parts.size < 3) return@mapNotNull null
-            val number = parts[0].toIntOrNull() ?: return@mapNotNull null
-            IssueSummary(number, parts[1], parts[2])
+            if (parts.size < names.size) return@mapNotNull null
+            build(parts.map(::unescapeTsv))
         }.toList()
     }
 
-    /**
-     * Open pull requests targeting [slug] via `gh pr list` (same TSV trick as
-     * [listOpenIssues]). Returns empty (not error) when gh isn't ready.
-     */
-    fun listOpenPrs(slug: String, limit: Int = 30): Result<List<PrSummary>> = runCatching {
-        if (ghStatus() != GhStatus.READY) return@runCatching emptyList()
-        val (out, exit) = runGh(
-            listOf(
-                "pr", "list", "--repo", slug, "--state", "open", "--limit", limit.toString(),
-                "--json", "number,title,url,headRefName",
-                "--jq", ".[] | [.number, .title, .url, .headRefName] | @tsv",
-            )
-        )
-        if (exit != 0) error(out.trim().takeLast(300).ifBlank { "gh pr list failed" })
-        out.lineSequence().mapNotNull { line ->
-            if (line.isBlank()) return@mapNotNull null
-            val parts = line.split('\t')
-            if (parts.size < 4) return@mapNotNull null
-            val number = parts[0].toIntOrNull() ?: return@mapNotNull null
-            PrSummary(number, parts[1], parts[2], parts[3])
-        }.toList()
+    /** Reverse jq @tsv's in-field escapes (\t \n \r \\) back to real characters. */
+    private fun unescapeTsv(field: String): String {
+        if ('\\' !in field) return field
+        val sb = StringBuilder(field.length)
+        var i = 0
+        while (i < field.length) {
+            val c = field[i]
+            if (c == '\\' && i + 1 < field.length) {
+                val unescaped = when (field[i + 1]) {
+                    't' -> '\t'
+                    'n' -> '\n'
+                    'r' -> '\r'
+                    '\\' -> '\\'
+                    else -> null
+                }
+                if (unescaped != null) {
+                    sb.append(unescaped)
+                    i += 2
+                    continue
+                }
+            }
+            sb.append(c)
+            i++
+        }
+        return sb.toString()
     }
 
     /**
@@ -148,11 +183,17 @@ class IssueReporter(private val services: EvolverServices) {
         val extras = listOf("$home/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin")
         pb.environment()["PATH"] = (extras + (pb.environment()["PATH"] ?: "")).joinToString(File.pathSeparator)
         val process = pb.start()
-        val out = process.inputStream.bufferedReader().readText()
+        // Drain output on a daemon thread: reading to EOF on this thread would
+        // block until the child closes its stream, making the timeout below
+        // unreachable if the child hangs (and the loading UI stuck with it).
+        val out = StringWriter()
+        val drainer = Thread { runCatching { process.inputStream.bufferedReader().copyTo(out) } }
+            .apply { isDaemon = true; start() }
         if (!process.waitFor(60, TimeUnit.SECONDS)) {
             process.destroyForcibly()
             return "timed out" to -1
         }
-        return out to process.exitValue()
+        drainer.join(5_000)
+        return out.toString() to process.exitValue()
     }
 }
