@@ -14,7 +14,6 @@ kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
 
 // Auto-detect CI environment
 val useLocalDependencies = System.getenv("CI") != "true"
-val bossPluginApiPath = "../boss-plugin-api"
 
 repositories {
     google()
@@ -24,8 +23,16 @@ repositories {
 
 dependencies {
     if (useLocalDependencies) {
-        // Local dev: boss-plugin-api JAR from sibling repo (pinned version)
-        compileOnly(files("$bossPluginApiPath/build/libs/boss-plugin-api-1.0.60.jar"))
+        // Local dev: pinned boss-plugin-api JAR from the sibling repo in the
+        // workspace. Walk up from the project dir so .worktrees/<slug> checkouts
+        // resolve it at any depth, keyed on the jar itself so a stray directory
+        // that merely shares the name can't shadow the real repo.
+        val apiJarRel = "build/libs/boss-plugin-api-1.0.60.jar"
+        val apiJar = generateSequence(projectDir.parentFile) { it.parentFile }
+            .map { it.resolve("boss-plugin-api").resolve(apiJarRel) }
+            .firstOrNull { it.isFile }
+            ?: projectDir.parentFile.resolve("boss-plugin-api").resolve(apiJarRel)
+        compileOnly(files(apiJar))
     } else {
         // CI: downloaded JAR
         compileOnly(files("build/downloaded-deps/boss-plugin-api.jar"))

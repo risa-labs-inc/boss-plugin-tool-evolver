@@ -138,6 +138,13 @@ class EvolverTabViewModel(
     private val _actionLog = MutableStateFlow<List<String>>(emptyList())
     val actionLog: StateFlow<List<String>> = _actionLog.asStateFlow()
 
+    /** Open PRs on the target repo, shown at the bottom of the Evolve section. */
+    private val _openPrs = MutableStateFlow<List<PrSummary>>(emptyList())
+    val openPrs: StateFlow<List<PrSummary>> = _openPrs.asStateFlow()
+
+    private val _prsLoading = MutableStateFlow(false)
+    val prsLoading: StateFlow<Boolean> = _prsLoading.asStateFlow()
+
     /**
      * Evolutions launched for this plugin (this app session), each paired with
      * whether its terminal tab is still open — drives the Activity rows whose
@@ -232,6 +239,7 @@ class EvolverTabViewModel(
                 if (_issueRepo.value == null) _issueRepo.value = services.issueReporter.repoSlug(target)
                 refreshWorktrees()
                 refreshIssues()
+                refreshPrs()
             }
         }
     }
@@ -503,7 +511,10 @@ class EvolverTabViewModel(
     }
 
     private fun openUrlAt(url: String, label: String, location: EvolveOpenLocation) {
-        val ops = services.context.splitViewOperations ?: return
+        val ops = services.context.splitViewOperations ?: run {
+            appendAction("Cannot open $label — host does not expose split view operations")
+            return
+        }
         when (location) {
             EvolveOpenLocation.NEW_TAB -> ops.openUrlInActivePanel(url, label, forceNewTab = true)
             EvolveOpenLocation.EXISTING_SPLIT -> ops.openUrlInSplit(url, label, TabSplitMode.EXISTING_SPLIT)
@@ -522,24 +533,45 @@ class EvolverTabViewModel(
     }
 
     /** Reload the open-issues list from the target repo. */
-    fun refreshIssues() {
-        val slug = _issueRepo.value?.takeUnless { it.isBlank() } ?: return
-        if (_issuesLoading.value) return
-        _issuesLoading.value = true
-        scope.launch(Dispatchers.IO) {
-            try {
-                services.issueReporter.listOpenIssues(slug).fold(
-                    onSuccess = { _openIssues.value = it },
-                    onFailure = { appendIssueLog("List issues failed: ${it.message}") },
-                )
-            } finally {
-                _issuesLoading.value = false
-            }
-        }
+    fun refreshIssues() = refreshGhList(_issuesLoading, "List issues", onError = ::appendIssueLog) { slug, status ->
+        services.issueReporter.listOpenIssues(slug, status = status).onSuccess { _openIssues.value = it }
     }
 
     /** Open an existing issue through the "Open Link" chooser. */
     fun openIssue(issue: IssueSummary) = openUrlChoosing(issue.url, "Issue #${issue.number}")
+
+    /** Reload the open-PRs list from the target repo. */
+    fun refreshPrs() = refreshGhList(_prsLoading, "List PRs", onError = ::appendAction) { slug, status ->
+        services.issueReporter.listOpenPrs(slug, status = status).onSuccess { _openPrs.value = it }
+    }
+
+    /** Open an existing PR through the "Open Link" chooser. */
+    fun openPr(pr: PrSummary) = openUrlChoosing(pr.url, "PR #${pr.number}")
+
+    /**
+     * Shared runner for the gh-backed lists (open issues / open PRs): atomically
+     * guards re-entrancy, re-probes gh when the last known status wasn't READY
+     * (so installing or signing in to gh mid-session is picked up by the refresh
+     * buttons), and always resets the loading flag.
+     */
+    private fun refreshGhList(
+        loading: MutableStateFlow<Boolean>,
+        label: String,
+        onError: (String) -> Unit,
+        fetch: (slug: String, status: GhStatus) -> Result<*>,
+    ) {
+        val slug = _issueRepo.value?.takeUnless { it.isBlank() } ?: return
+        if (!loading.compareAndSet(expect = false, update = true)) return
+        scope.launch(Dispatchers.IO) {
+            try {
+                val status = _ghStatus.value.takeIf { it == GhStatus.READY }
+                    ?: services.issueReporter.ghStatus().also { _ghStatus.value = it }
+                fetch(slug, status).onFailure { onError("$label failed: ${it.message}") }
+            } finally {
+                loading.value = false
+            }
+        }
+    }
 
     private suspend fun doLaunch(agent: CliAgent, location: EvolveOpenLocation, dir: File, branch: String?) {
         val target = _target.value ?: return
@@ -562,7 +594,15 @@ class EvolverTabViewModel(
     fun setIssueTitle(value: String) { _issueTitle.value = value }
     fun setIssueBody(value: String) { _issueBody.value = value }
     fun setAttachDiagnostics(value: Boolean) { _attachDiagnostics.value = value }
-    fun setIssueRepo(value: String) { _issueRepo.value = value.trim().ifBlank { null } }
+    fun setIssueRepo(value: String) {
+        val slug = value.trim().ifBlank { null }
+        if (slug == _issueRepo.value) return
+        _issueRepo.value = slug
+        // Retargeting invalidates both gh-backed lists — clear them rather than
+        // keep showing (and opening) another repo's rows; Refresh reloads.
+        _openIssues.value = emptyList()
+        _openPrs.value = emptyList()
+    }
 
     /** File a GitHub issue on the plugin's repo (optionally attaching diagnostics). */
     fun createIssue() {
