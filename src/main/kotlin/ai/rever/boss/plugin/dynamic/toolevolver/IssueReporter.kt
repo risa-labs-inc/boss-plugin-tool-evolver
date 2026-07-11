@@ -146,20 +146,10 @@ class IssueReporter(private val services: EvolverServices) {
      * tab can show the right guidance instead of a generic failure.
      */
     fun ghStatus(): GhStatus {
-        if (!binaryOnPath("gh")) return GhStatus.NOT_INSTALLED
+        if (CliAgent.resolveBinary("gh") == null) return GhStatus.NOT_INSTALLED
         val exit = runCatching { runGh(listOf("auth", "status")).second }.getOrNull()
             ?: return GhStatus.NOT_INSTALLED // start() threw despite the PATH probe
         return if (exit == 0) GhStatus.READY else GhStatus.NOT_AUTHENTICATED
-    }
-
-    /** True when [bin] is an executable file on PATH or a common install dir. */
-    private fun binaryOnPath(bin: String): Boolean {
-        val home = System.getProperty("user.home")
-        val extras = listOf("$home/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin")
-        val pathDirs = (System.getenv("PATH") ?: "").split(File.pathSeparator)
-        return (pathDirs + extras).any { dir ->
-            dir.isNotBlank() && File(dir, bin).let { it.isFile && it.canExecute() }
-        }
     }
 
     private fun originRemote(dir: File): String? = runCatching {
@@ -177,7 +167,10 @@ class IssueReporter(private val services: EvolverServices) {
 
     /** Run a process with a widened PATH (the packaged host launches with a bare PATH). */
     private fun run(dir: File?, command: List<String>): Pair<String, Int> {
-        val pb = ProcessBuilder(command).redirectErrorStream(true)
+        // A bare command name is resolved against the PARENT's PATH, not the
+        // widened child PATH below — resolve it to an absolute path ourselves.
+        val exe = CliAgent.resolveBinary(command.first())?.absolutePath ?: command.first()
+        val pb = ProcessBuilder(listOf(exe) + command.drop(1)).redirectErrorStream(true)
         if (dir != null) pb.directory(dir)
         val home = System.getProperty("user.home")
         val extras = listOf("$home/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin")
