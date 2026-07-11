@@ -139,6 +139,19 @@ class EvolverTabViewModel(
     val actionLog: StateFlow<List<String>> = _actionLog.asStateFlow()
 
     /**
+     * Evolutions launched for this plugin (this app session), each paired with
+     * whether its terminal tab is still open — drives the Activity rows whose
+     * button re-focuses the session's terminal.
+     */
+    val sessions: StateFlow<List<Pair<EvolveSession, Boolean>>> = combine(
+        services.evolveLauncher.sessions,
+        services.context.activeTabsProvider?.activeTabs ?: MutableStateFlow(emptyList()),
+    ) { all, tabs ->
+        all.filter { it.pluginId == targetPluginId }
+            .map { session -> session to tabs.any { it.tabId == session.tabId } }
+    }.stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    /**
      * Which AI CLIs are actually installed — gates the agent buttons (a missing
      * CLI can't be launched). Optimistic until the async check completes; refreshed
      * with the target so installing a CLI mid-session is picked up on Refresh.
@@ -418,6 +431,24 @@ class EvolverTabViewModel(
             val remembered = services.getRememberedOpenLocation()
             if (remembered != null) doLaunch(agent, remembered, dir, branch)
             else _pendingOpen.value = PendingOpen.Evolve(agent, dir.absolutePath, branch)
+        }
+    }
+
+    /** Focus the terminal tab of a previously launched evolution session. */
+    fun focusSessionTerminal(session: EvolveSession) {
+        val provider = services.context.activeTabsProvider ?: run {
+            appendAction("Cannot focus terminal — host does not expose active tabs")
+            return
+        }
+        scope.launch {
+            runCatching { provider.refreshTabs() }
+            val tab = provider.activeTabs.value.firstOrNull { it.tabId == session.tabId }
+            if (tab == null) {
+                appendAction("${session.agent.displayName} session terminal is no longer open")
+                services.toastError("That session's terminal tab was closed")
+            } else {
+                provider.selectTab(tab.tabId, tab.panelId)
+            }
         }
     }
 
