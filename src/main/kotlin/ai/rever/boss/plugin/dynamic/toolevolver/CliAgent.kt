@@ -20,7 +20,8 @@ enum class CliAgent(
     private val autoFlags: String,
 ) {
     CLAUDE_CODE("Claude Code", "claude", "--permission-mode auto"),
-    CODEX("Codex", "codex", "--sandbox workspace-write -a on-failure"),
+    // codex-cli >= 0.144 dropped "on-failure"; "on-request" is the surviving hands-free policy.
+    CODEX("Codex", "codex", "--sandbox workspace-write -a on-request"),
     GEMINI("Gemini", "gemini", "--approval-mode yolo"),
     OPENCODE("OpenCode", "opencode", "");
 
