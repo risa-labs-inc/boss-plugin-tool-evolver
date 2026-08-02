@@ -118,9 +118,14 @@ class EvolverServices(val context: PluginContext) {
 
         /**
          * Permission required to evolve a plugin (launch an AI CLI on its source,
-         * hot-reload, open PRs). The plugin-development capability held by the
-         * `boss_admin` role — the same gate the Tool Creator uses.
+         * hot-reload, open PRs). The plugin-authoring capability held by the
+         * `boss_plugin_admin` role (and inherited by `boss_admin`/`admin`) — the
+         * same gate the Tool Creator and the Toolbox Create tab use.
+         *
+         * Not `plugins.admin.publish`: that is store-wide moderation, and gating
+         * evolve on it would leave a plugin author able to publish but unable to
+         * iterate.
          */
-        const val EVOLVE_PERMISSION = "plugins.admin.publish"
+        const val EVOLVE_PERMISSION = "plugins.create"
     }
 }
