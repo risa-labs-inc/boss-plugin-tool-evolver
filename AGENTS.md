@@ -4,7 +4,7 @@
 
 **Tool Evolver** (`ai.rever.boss.plugin.dynamic.toolevolver`) is a dynamic plugin for the BOSS desktop application.
 
-Probe and evolve installed tools (plugins): per-plugin memory footprint + leak signals + logs, and AI-driven evolution with Claude Code, Codex, Gemini, or OpenCode — including live hot reload and PR creation.
+Probe and evolve installed tools (plugins): per-plugin memory footprint + leak signals + logs, and AI-driven evolution with Claude Code, Codex, Gemini, or OpenCode - including live hot reload and PR creation.
 
 - **Plugin ID**: `ai.rever.boss.plugin.dynamic.toolevolver`
 - **Main Class**: `ai.rever.boss.plugin.dynamic.toolevolver.ToolEvolverDynamicPlugin`
@@ -28,7 +28,7 @@ Probe and evolve installed tools (plugins): per-plugin memory footprint + leak s
 ### Plugin Structure
 ```
 src/main/kotlin/   → Plugin source code (package: ai.rever.boss.plugin.dynamic.toolevolver)
-src/main/resources/META-INF/boss-plugin/plugin.json → Plugin manifest (type: mixed — panel + tab)
+src/main/resources/META-INF/boss-plugin/plugin.json → Plugin manifest (type: mixed - panel + tab)
 src/main/resources/templates/evolve-skill-body.md   → Skill body written into evolved plugin repos
 build.gradle.kts   → Build config + version (single source of truth)
 ```
@@ -40,24 +40,24 @@ build.gradle.kts   → Build config + version (single source of truth)
   and the "Open Evolver…" picker overlay select a tool.
 - **Evolver tab** (`EvolverTabType`, opened via `splitViewOperations.openTab(EvolverTabInfo(...))`,
   stable id per target plugin) with two sections:
-  - **Probe** — memory footprint of the target plugin sampled from the in-process
+  - **Probe** - memory footprint of the target plugin sampled from the in-process
     `DiagnosticCommand` MBean class histogram (`MemoryProbe`, filtered by the plugin's mainClass
     package; forces a GC per sample), leak heuristics (`MemoryProbe.leakSignals`: unloaded-but-
     resident objects, >1 running instances, monotonic growth), and host stdout/stderr log lines
     filtered to the plugin (`logDataProvider` + keyword match).
-  - **Evolve** — locates the plugin's source repo (workspace scan in `EvolveLauncher`, manual
+  - **Evolve** - locates the plugin's source repo (workspace scan in `EvolveLauncher`, manual
     override via directory picker), writes the `evolve` skill in all four CLI formats
     (`.claude/skills/`, `.codex/skills/`, `.gemini/commands/`, `.opencode/command/`), and opens a
     BossTerm tab (`TerminalTabInfo(initialCommand, workingDirectory)`) running the chosen CLI.
     Also offers "Rebuild & hot reload now" (`HotReloader.rebuildAndReload`: `./gradlew
     buildPluginJar` via ProcessBuilder, then live reload).
 - **Hot reload** (`HotReloader`): copies a built jar into the RUNNING host's plugins dir
-  (`PluginLoaderDelegate.getPluginsDirectory()` — `~/.boss/plugins` installed, `~/.boss_debug/plugins`
+  (`PluginLoaderDelegate.getPluginsDirectory()` - `~/.boss/plugins` installed, `~/.boss_debug/plugins`
   dev mode), deletes stale jars of the same plugin, `unloadPlugin` + `loadPlugin`. No restart.
 - **MCP tools** (`ToolEvolverMcpToolProvider`): `evolver_list_tools`, `evolver_probe`,
   `evolver_open`, `evolver_evolve`, `evolver_hot_reload`. The evolve skill instructs the agent to
   call `evolver_hot_reload` after each build and to finish by opening a PR (`gh pr create` from an
-  `evolve/<topic>` branch — never pushing `main`, which would trigger a store release).
+  `evolve/<topic>` branch - never pushing `main`, which would trigger a store release).
 
 ### Key Patterns
 - Entry point: `DynamicPlugin` interface with `register(context)` and `dispose()`
@@ -77,13 +77,13 @@ build.gradle.kts   → Build config + version (single source of truth)
 
 **`build.gradle.kts` is the single source of truth for version.**
 
-The `processResources` task automatically syncs the version into `plugin.json` at build time. Never manually edit the version in `plugin.json` — only change it in `build.gradle.kts`.
+The `processResources` task automatically syncs the version into `plugin.json` at build time. Never manually edit the version in `plugin.json` - only change it in `build.gradle.kts`.
 
 ## Code Quality
 
 - Use Compose Multiplatform APIs (not Android-specific)
 - All Kotlin files must end with a newline
-- Handle null providers gracefully — show fallback UI, never crash
+- Handle null providers gracefully - show fallback UI, never crash
 
 ## CI/CD
 
