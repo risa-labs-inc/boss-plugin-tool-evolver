@@ -8,7 +8,7 @@ Probe and evolve installed tools (plugins): per-plugin memory footprint + leak s
 
 - **Plugin ID**: `ai.rever.boss.plugin.dynamic.toolevolver`
 - **Main Class**: `ai.rever.boss.plugin.dynamic.toolevolver.ToolEvolverDynamicPlugin`
-- **API Version**: 1.0.55
+- **API Version**: 1.0.72 (BossDialog needs a host that pins it - see minBossVersion in plugin.json)
 
 ## Essential Commands
 

@@ -1,5 +1,6 @@
 package ai.rever.boss.plugin.dynamic.toolevolver
 
+import ai.rever.boss.plugin.ui.BossDialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,7 +25,6 @@ import androidx.compose.material.Checkbox
 import androidx.compose.material.CheckboxDefaults
 import androidx.compose.material.Surface
 import androidx.compose.material.TextButton
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Columns
@@ -1055,7 +1055,12 @@ internal fun OpenLocationDialog(
     onDismiss: () -> Unit,
 ) {
     var remember by remember { mutableStateOf(false) }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties()) {
+    // BossDialog, not Dialog: under HARDWARE_ACCELERATED - the host default on every platform since
+    // BossConsole 9.4.1 - Chromium composites its own native window over the Compose scene, so a
+    // plain Compose Dialog in a plugin panel is drawn BEHIND the page. BossDialog routes through the
+    // host's always-on-top overlay window and supplies the scrim, falling back to exactly this
+    // Dialog wherever the browser is off-screen.
+    BossDialog(onDismissRequest = onDismiss, properties = DialogProperties()) {
         Surface(
             color = MaterialTheme.colors.surface,
             shape = RoundedCornerShape(12.dp),
