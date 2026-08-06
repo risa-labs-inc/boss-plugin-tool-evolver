@@ -27,7 +27,7 @@ dependencies {
         // workspace. Walk up from the project dir so .worktrees/<slug> checkouts
         // resolve it at any depth, keyed on the jar itself so a stray directory
         // that merely shares the name can't shadow the real repo.
-        val apiJarRel = "build/libs/boss-plugin-api-1.0.60.jar"
+        val apiJarRel = "build/libs/boss-plugin-api-1.0.72.jar"
         val apiJar = generateSequence(projectDir.parentFile) { it.parentFile }
             .map { it.resolve("boss-plugin-api").resolve(apiJarRel) }
             .firstOrNull { it.isFile }
