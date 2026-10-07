@@ -23,11 +23,11 @@ import kotlinx.coroutines.flow.update
  * host's terminal-link chooser. Splits use [TabSplitMode] via
  * [ai.rever.boss.plugin.api.SplitViewOperations.openTabInSplit]; NEW_TAB uses openTab.
  */
-enum class EvolveOpenLocation(val label: String) {
-    NEW_TAB("new tab"),
-    EXISTING_SPLIT("existing split"),
-    SPLIT_RIGHT("split right"),
-    SPLIT_DOWN("split down"),
+enum class EvolveOpenLocation(val label: String, val mcpLocation: String) {
+    NEW_TAB("new tab", "new_tab"),
+    EXISTING_SPLIT("existing split", "existing_split"),
+    SPLIT_RIGHT("split right", "split_right"),
+    SPLIT_DOWN("split down", "split_down"),
 }
 
 /**
@@ -308,7 +308,7 @@ class EvolveLauncher(private val services: EvolverServices) {
         val tabId = if (agent.isNative) {
             val registry = services.context.mcpToolRegistry
                 ?: error("Fluck Agent launch is unavailable; enable its fluck_launch tool and refresh.")
-            nativeFluckTabId(registry, repoDir, nativePrompt(info.displayName, repoDir, task), "Evolve: ${info.displayName}$label")
+            nativeFluckTabId(registry, repoDir, nativePrompt(info.displayName, repoDir, task), "Evolve: ${info.displayName}$label", location)
         } else {
             val ops = services.context.splitViewOperations
                 ?: error("BOSS tab operations are unavailable; cannot open ${agent.displayName}.")
@@ -356,12 +356,19 @@ class EvolveLauncher(private val services: EvolverServices) {
             owned && it.definition.name == "fluck_launch"
         } == true
 
-        internal suspend fun nativeFluckTabId(registry: McpToolRegistry, repoDir: File, prompt: String, title: String): String {
+        internal suspend fun nativeFluckTabId(
+            registry: McpToolRegistry,
+            repoDir: File,
+            prompt: String,
+            title: String,
+            location: EvolveOpenLocation = EvolveOpenLocation.NEW_TAB,
+        ): String {
             require(nativeAvailable(registry)) { "Install or enable Fluck Agent and its fluck_launch tool, then refresh." }
             val arguments = buildJsonObject {
                 put("project", repoDir.absolutePath)
                 put("prompt", prompt)
                 put("title", title)
+                put("location", location.mcpLocation)
             }.toString()
             val result = registry.invoke("fluck_launch", arguments)
             check(!result.isError) { result.text.ifBlank { "Fluck Agent could not open a conversation." } }

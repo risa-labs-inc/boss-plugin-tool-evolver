@@ -49,7 +49,7 @@ build.gradle.kts   → Build config + version (single source of truth)
     override via directory picker), writes the `evolve` skill in all four CLI formats
     (`.claude/skills/`, `.codex/skills/`, `.gemini/commands/`, `.opencode/command/`), and opens a
     BossTerm tab (`TerminalTabInfo(initialCommand, workingDirectory)`) running the chosen CLI.
-    Native Fluck invokes the public `fluck_launch` MCP tool with the selected `project`, prompt, and title; its real tab id is retained for conversation focus. Fluck and its launch tool must be enabled.
+    Native Fluck invokes the public `fluck_launch` MCP tool with the selected `project`, prompt, title, and `location` (`new_tab`, `existing_split`, `split_right`, or `split_down`); its real tab id is retained for conversation focus. Native and terminal agents share the link open-location chooser and remembered preference. Fluck and its launch tool must be enabled.
     Also offers "Rebuild & hot reload now" (`HotReloader.rebuildAndReload`: `./gradlew
     buildPluginJar` via ProcessBuilder, then live reload).
 - **Hot reload** (`HotReloader`): copies a built jar into the RUNNING host's plugins dir

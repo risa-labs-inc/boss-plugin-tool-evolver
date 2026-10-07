@@ -19,7 +19,7 @@ leaving the app.
 - **MCP tools** for agents: `evolver_list_tools`, `evolver_probe`, `evolver_open`,
   `evolver_evolve`, `evolver_hot_reload`.
 
-Select **Fluck Agent** in Evolve for a native BOSS conversation bound to the chosen repository or worktree. Install or enable Fluck and refresh if unavailable. Terminal agents still open in BossTerm. Activity reopens the same conversation or terminal; Fluck uses its configured backend and approval settings.
+Select **Fluck Agent** in Evolve for a native BOSS conversation bound to the chosen repository or worktree. Choose where it opens using the same location dialog as links: a new tab in the active panel, an existing split, or a new split to the right or below. A remembered destination applies to both links and coding agents. Install or enable Fluck and refresh if unavailable. Terminal agents still open in BossTerm. Activity reopens the same conversation or terminal; Fluck uses its configured backend and approval settings.
 
 ## Build
 

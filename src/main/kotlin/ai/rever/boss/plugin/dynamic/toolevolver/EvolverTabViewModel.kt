@@ -448,13 +448,9 @@ class EvolverTabViewModel(
             try {
                 val resolved = resolveWorkDir() ?: return@launch
                 val (dir, branch) = resolved
-                if (agent.isNative) {
-                    doLaunch(agent, EvolveOpenLocation.NEW_TAB, dir, branch)
-                } else {
-                    val remembered = services.getRememberedOpenLocation()
-                    if (remembered != null) doLaunch(agent, remembered, dir, branch)
-                    else _pendingOpen.value = PendingOpen.Evolve(agent, dir.absolutePath, branch)
-                }
+                val remembered = services.getRememberedOpenLocation()
+                if (remembered != null) doLaunch(agent, remembered, dir, branch)
+                else _pendingOpen.value = PendingOpen.Evolve(agent, dir.absolutePath, branch)
             } finally {
                 _busy.value = false
             }
@@ -488,8 +484,7 @@ class EvolverTabViewModel(
         val dir = File(wt.path)
         scope.launch {
             val remembered = services.getRememberedOpenLocation()
-            if (agent.isNative) doLaunch(agent, EvolveOpenLocation.NEW_TAB, dir, wt.branch)
-            else if (remembered != null) doLaunch(agent, remembered, dir, wt.branch)
+            if (remembered != null) doLaunch(agent, remembered, dir, wt.branch)
             else _pendingOpen.value = PendingOpen.Evolve(agent, dir.absolutePath, wt.branch)
         }
     }

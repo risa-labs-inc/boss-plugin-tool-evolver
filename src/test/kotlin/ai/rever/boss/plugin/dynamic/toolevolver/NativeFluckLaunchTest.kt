@@ -33,11 +33,28 @@ class NativeFluckLaunchTest {
         assertEquals(repo.absolutePath, arguments["project"]!!.jsonPrimitive.content)
         assertEquals(prompt, arguments["prompt"]!!.jsonPrimitive.content)
         assertEquals("Evolve: Test plugin", arguments["title"]!!.jsonPrimitive.content)
+        assertEquals("new_tab", arguments["location"]!!.jsonPrimitive.content)
         assertTrue(prompt.contains(task), "Native requests must not be shell-sanitized")
         assertTrue(prompt.contains(repo.absolutePath))
         assertTrue(prompt.contains(".claude/skills/evolve/SKILL.md"))
         assertTrue(prompt.contains("evolver_hot_reload"))
         assertTrue(prompt.contains("Do not push main"))
+    }
+
+    @Test
+    fun `native launch forwards every chooser destination through MCP`() = runBlocking {
+        val choices = mapOf(
+            EvolveOpenLocation.NEW_TAB to "new_tab",
+            EvolveOpenLocation.EXISTING_SPLIT to "existing_split",
+            EvolveOpenLocation.SPLIT_RIGHT to "split_right",
+            EvolveOpenLocation.SPLIT_DOWN to "split_down",
+        )
+        choices.forEach { (location, expected) ->
+            val registry = RecordingRegistry()
+            EvolveLauncher.nativeFluckTabId(registry, File("/tmp/repo"), "evolve", "Evolve", location)
+            val arguments = Json.parseToJsonElement(registry.receivedArguments!!).jsonObject
+            assertEquals(expected, arguments["location"]!!.jsonPrimitive.content)
+        }
     }
 
     @Test
