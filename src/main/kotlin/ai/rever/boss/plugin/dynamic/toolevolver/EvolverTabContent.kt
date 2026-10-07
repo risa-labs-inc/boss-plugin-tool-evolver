@@ -1,8 +1,13 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package ai.rever.boss.plugin.dynamic.toolevolver
 
 import ai.rever.boss.plugin.ui.BossDialog
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,7 +77,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val CardShape = RoundedCornerShape(8.dp)
+private val CardShape = RoundedCornerShape(12.dp)
 private val Green = Color(0xFF5DBB63)
 private val Amber = Color(0xFFF2A93B)
 
@@ -108,7 +113,7 @@ internal fun ProbeSection(viewModel: EvolverTabViewModel) {
     ) {
             // ------------------------------------------------ tool info card
             Card(backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
-                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     SectionTitle("Tool")
                     target?.let { t ->
                         InfoLine("Version", t.version)
@@ -136,10 +141,9 @@ internal fun ProbeSection(viewModel: EvolverTabViewModel) {
 
             // --------------------------------------------------- memory card
             Card(backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
-                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        SectionTitle("Memory & leaks")
-                        Spacer(Modifier.weight(1f))
+                Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SectionTitle("Memory & leaks")
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (sampling) {
                             CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
                             Spacer(Modifier.width(8.dp))
@@ -173,7 +177,7 @@ internal fun ProbeSection(viewModel: EvolverTabViewModel) {
                             color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
                         )
                     } else {
-                        Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Metric("Footprint", MemoryProbe.humanBytes(latest.totalBytes))
                             Metric("Instances", latest.instanceCount.toString())
                             Metric("Classes", latest.classCount.toString())
@@ -250,7 +254,7 @@ private fun LogsCard(viewModel: EvolverTabViewModel) {
     }
 
     Card(Modifier.fillMaxWidth(), backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
-        Column(Modifier.fillMaxWidth().padding(14.dp)) {
+        Column(Modifier.fillMaxWidth().padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SectionTitle("Logs (lines mentioning this tool)")
                 Spacer(Modifier.weight(1f))
@@ -350,8 +354,8 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
-            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionTitle("Source repo")
+            Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                StepTitle(1, "Source repository", "Choose the checkout the agent will work in.")
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = repoPath ?: "",
@@ -385,15 +389,15 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                         textStyle = TextStyle(fontSize = 11.sp, fontFamily = FontFamily.Monospace),
                         placeholder = { Text("git URL…", fontSize = 11.sp) },
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
+                    OutlinedTextField(
                             value = cloneParent,
                             onValueChange = viewModel::setCloneParent,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             textStyle = TextStyle(fontSize = 11.sp, fontFamily = FontFamily.Monospace),
                             placeholder = { Text("Clone into…", fontSize = 11.sp) },
                         )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { viewModel.browseCloneParent() }) {
                             Icon(Icons.Default.Folder, null, Modifier.size(14.dp))
                             Spacer(Modifier.width(6.dp))
@@ -414,7 +418,8 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                     onValueChange = viewModel::setTask,
                     modifier = Modifier.fillMaxWidth(),
                     textStyle = TextStyle(fontSize = 12.sp),
-                    placeholder = { Text("Optional: what should evolve? (passed to the agent)", fontSize = 11.sp) },
+                    label = { Text("What should change?", fontSize = 12.sp) },
+                    placeholder = { Text("Describe a feature, fix, or improvement…", fontSize = 12.sp) },
                     maxLines = 3,
                 )
             }
@@ -422,8 +427,8 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
 
         // ---------------------------------------------------- evolution mode
         Card(backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
-            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionTitle("Evolution mode")
+            Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                StepTitle(2, "Working branch", "Work in this checkout or isolate your change in a worktree.")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ModeChip(
                         title = "Normal",
@@ -451,7 +456,7 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         textStyle = TextStyle(fontSize = 12.sp),
-                        label = { Text("Optional: search worktrees or name a new one → .worktrees/<slug> on evolve/<slug>", fontSize = 10.sp) },
+                        label = { Text("Worktree name (optional)", fontSize = 12.sp) },
                         placeholder = { Text("e.g. dark-mode or fix-crash", fontSize = 11.sp) },
                         leadingIcon = {
                             Icon(
@@ -520,8 +525,8 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
         }
 
         Card(backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
-            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionTitle("Evolve with…")
+            Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                StepTitle(3, "Choose your agent", "Build, hot reload, verify, then open a pull request.")
                 if (!canEvolve) {
                     Row(verticalAlignment = Alignment.Top) {
                         Icon(Icons.Default.Lock, null, tint = Amber, modifier = Modifier.size(13.dp))
@@ -539,39 +544,57 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
                         evolveMode == EvolveMode.WORKTREE && slugPreview.isEmpty() ->
                             "No worktree selected — evolves this checkout directly. Search or name one above to isolate the evolution."
                         evolveMode == EvolveMode.WORKTREE && targetedWorktree != null ->
-                            "Uses existing worktree .worktrees/${targetedWorktree.slug} (${targetedWorktree.branch.ifBlank { "detached" }}), writes the evolve skill there, and opens the agent in a BossTerm tab."
+                            "Uses existing worktree .worktrees/${targetedWorktree.slug} (${targetedWorktree.branch.ifBlank { "detached" }}), writes the evolve skill there, and starts your chosen agent."
                         evolveMode == EvolveMode.WORKTREE ->
-                            "Creates .worktrees/$slugPreview on evolve/$slugPreview, writes the evolve skill there, and opens the agent in a BossTerm tab."
-                        else -> "Writes the evolve skill (plugin context, hot-reload + PR workflow) into the repo and opens the agent in a BossTerm tab."
+                            "Creates .worktrees/$slugPreview on evolve/$slugPreview, writes the evolve skill there, and starts your chosen agent."
+                        else -> "Writes the evolve skill (plugin context, hot-reload + PR workflow) into the repo and starts your chosen agent."
                     },
                     fontSize = 10.sp,
                     color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f),
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CliAgent.entries.forEach { agent ->
-                        val installed = agentAvailability[agent] == true
+                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    val columns = if (maxWidth < 420.dp) 1 else 2
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val nativeAgent = CliAgent.FLUCK_AGENT
+                        val nativeAvailable = agentAvailability[nativeAgent] == true
                         AgentButton(
-                            agent = agent,
-                            installed = installed,
-                            // Gated on the CLI actually being installed — a missing
-                            // binary can't be launched, so the button is disabled.
-                            enabled = !busy && repoPath != null && canEvolve && installed,
-                            onClick = { viewModel.launchEvolve(agent) },
-                            modifier = Modifier.weight(1f),
+                            agent = nativeAgent,
+                            installed = nativeAvailable,
+                            enabled = !busy && !repoPath.isNullOrBlank() && canEvolve && nativeAvailable,
+                            onClick = { viewModel.launchEvolve(nativeAgent) },
+                            modifier = Modifier.fillMaxWidth(),
                         )
+                        Text("Terminal agents", fontSize = 11.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f))
+                        CliAgent.entries.filterNot { it.isNative }.chunked(columns).forEach { agents ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                agents.forEach { agent ->
+                                    val installed = agentAvailability[agent] == true
+                                    AgentButton(
+                                        agent = agent,
+                                        installed = installed,
+                                        enabled = !busy && !repoPath.isNullOrBlank() && canEvolve && installed,
+                                        onClick = { viewModel.launchEvolve(agent) },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                                if (agents.size < columns) Spacer(Modifier.weight(1f))
+                            }
+                        }
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = { viewModel.rebuildAndReload() },
-                        enabled = !busy && repoPath != null && canEvolve,
-                        colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary),
-                    ) {
-                        Icon(Icons.Default.PlayArrow, null, Modifier.size(14.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Rebuild & hot reload now", fontSize = 11.sp)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { viewModel.rebuildAndReload() },
+                            enabled = !busy && !repoPath.isNullOrBlank() && canEvolve,
+                            colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary),
+                        ) {
+                            Icon(Icons.Default.PlayArrow, null, Modifier.size(14.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Rebuild & hot reload now", fontSize = 11.sp)
+                        }
+                        if (busy) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
                     }
-                    if (busy) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
                     Text(
                         "The evolve agent normally does this itself via the evolver_hot_reload MCP tool.",
                         fontSize = 10.sp,
@@ -587,7 +610,7 @@ internal fun EvolveSection(viewModel: EvolverTabViewModel) {
             shape = CardShape,
             elevation = 0.dp,
         ) {
-            Column(Modifier.fillMaxWidth().padding(14.dp)) {
+            Column(Modifier.fillMaxWidth().padding(18.dp)) {
                 SectionTitle("Activity")
                 Spacer(Modifier.height(6.dp))
                 // Launched sessions first: each row jumps back to its terminal tab.
@@ -696,7 +719,7 @@ private fun <T> GhListCard(
     row: @Composable (T) -> Unit,
 ) {
     Card(Modifier.fillMaxWidth(), backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
-        Column(Modifier.fillMaxWidth().padding(14.dp)) {
+        Column(Modifier.fillMaxWidth().padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SectionTitle(title)
                 Spacer(Modifier.width(6.dp))
@@ -743,7 +766,7 @@ private fun SessionRow(session: EvolveSession, open: Boolean, onFocus: () -> Uni
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            FeatherIcons.Terminal, null,
+            if (session.agent.isNative) Icons.Default.Memory else FeatherIcons.Terminal, null,
             tint = if (open) Green else MaterialTheme.colors.onSurface.copy(alpha = 0.3f),
             modifier = Modifier.size(13.dp),
         )
@@ -759,13 +782,13 @@ private fun SessionRow(session: EvolveSession, open: Boolean, onFocus: () -> Uni
             Text(
                 "started " + remember(session.startedAtMs) {
                     SimpleDateFormat("HH:mm").format(Date(session.startedAtMs))
-                } + if (open) "" else "  ·  terminal closed",
+                } + if (open) "" else "  ·  session closed",
                 fontSize = 9.sp,
                 color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f),
             )
         }
         OutlinedButton(onClick = onFocus, enabled = open) {
-            Text("Focus terminal", fontSize = 10.sp)
+            Text(if (session.agent.isNative) "Open conversation" else "Focus terminal", fontSize = 10.sp)
         }
     }
 }
@@ -810,14 +833,15 @@ private fun AgentButton(
     modifier: Modifier = Modifier,
 ) {
     Card(
-        modifier = modifier.clickable(enabled = enabled, onClick = onClick),
-        backgroundColor = MaterialTheme.colors.background,
+        modifier = modifier.border(1.dp, MaterialTheme.colors.onSurface.copy(alpha = 0.12f), CardShape)
+            .clickable(enabled = enabled, onClick = onClick),
+        backgroundColor = if (agent.isNative) MaterialTheme.colors.primary.copy(alpha = 0.08f) else MaterialTheme.colors.background,
         shape = CardShape,
         elevation = 0.dp,
     ) {
         Column(
-            Modifier.fillMaxWidth().padding(vertical = 10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            Modifier.fillMaxWidth().padding(14.dp),
+            horizontalAlignment = Alignment.Start,
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             Text(
@@ -828,9 +852,14 @@ private fun AgentButton(
                 else MaterialTheme.colors.onBackground.copy(alpha = 0.4f),
             )
             Text(
-                if (installed) "installed" else "not found",
-                fontSize = 9.sp,
-                color = if (installed) Green else Amber,
+                when {
+                    agent.isNative && installed -> "Open a BOSS conversation · no CLI installation required"
+                    agent.isNative -> "Enable Fluck Agent and its launch tool, then refresh"
+                    installed -> "Open in terminal"
+                    else -> "Install ${agent.binary} to continue"
+                },
+                fontSize = 11.sp,
+                color = if (installed) MaterialTheme.colors.onSurface.copy(alpha = 0.65f) else Amber,
             )
         }
     }
@@ -839,12 +868,26 @@ private fun AgentButton(
 // -------------------------------------------------------------------- helpers
 
 @Composable
+private fun StepTitle(number: Int, title: String, description: String) {
+    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(
+            Modifier.size(26.dp).background(MaterialTheme.colors.primary.copy(alpha = 0.12f), RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center,
+        ) { Text(number.toString(), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colors.primary) }
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            SectionTitle(title)
+            Text(description, fontSize = 12.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f))
+        }
+    }
+}
+
+@Composable
 private fun SectionTitle(text: String) {
     Text(
         text,
-        fontSize = 11.sp,
+        fontSize = 13.sp,
         fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colors.onSurface.copy(alpha = 0.65f),
+        color = MaterialTheme.colors.onSurface,
     )
 }
 
@@ -901,7 +944,7 @@ internal fun IssueSection(viewModel: EvolverTabViewModel) {
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(backgroundColor = MaterialTheme.colors.surface, shape = CardShape, elevation = 0.dp) {
-            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     SectionTitle("New GitHub issue")
                     Spacer(Modifier.weight(1f))
@@ -937,7 +980,7 @@ internal fun IssueSection(viewModel: EvolverTabViewModel) {
                     label = { Text("Description", fontSize = 10.sp) },
                     placeholder = { Text("What's the problem or request?", fontSize = 11.sp) },
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.clickable { viewModel.setAttachDiagnostics(!attach) },
@@ -954,7 +997,6 @@ internal fun IssueSection(viewModel: EvolverTabViewModel) {
                             color = MaterialTheme.colors.onSurface.copy(alpha = 0.8f),
                         )
                     }
-                    Spacer(Modifier.weight(1f))
                     if (busy) {
                         CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(8.dp))
@@ -978,7 +1020,7 @@ internal fun IssueSection(viewModel: EvolverTabViewModel) {
             shape = CardShape,
             elevation = 0.dp,
         ) {
-            Column(Modifier.fillMaxWidth().padding(14.dp)) {
+            Column(Modifier.fillMaxWidth().padding(18.dp)) {
                 SectionTitle("Activity")
                 Spacer(Modifier.height(6.dp))
                 if (log.isEmpty()) {
@@ -1146,7 +1188,7 @@ private fun LocationCard(
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         backgroundColor = MaterialTheme.colors.onSurface.copy(alpha = 0.05f),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         elevation = 0.dp,
     ) {
         Row(

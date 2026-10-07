@@ -70,11 +70,11 @@ class ToolEvolverMcpToolProvider(
         ),
         McpToolDefinition.withRbac(
             name = "evolver_evolve",
-            description = "Start evolving a plugin with an AI CLI: writes the evolve skill (with plugin context) into the plugin's source repo and opens a BossTerm tab there running the CLI. If no local checkout is found it clones the repo into the plugins umbrella first. Agents: claude, codex, gemini, opencode.",
+            description = "Start evolving a plugin: writes the evolve skill into its source repo and opens Fluck Agent in a native BOSS conversation or a CLI agent in a BossTerm tab. If no local checkout is found it clones the repo into the plugins umbrella first. Agents: fluck, claude, codex, gemini, opencode.",
             inputSchema = """{"type":"object","properties":{
                 "plugin_id":{"type":"string","description":"Plugin id to evolve"},
-                "agent":{"type":"string","enum":["claude","codex","gemini","opencode"],"description":"AI CLI to launch (default claude)"},
-                "task":{"type":"string","description":"Optional evolution request passed to the CLI"},
+                "agent":{"type":"string","enum":["fluck","claude","codex","gemini","opencode"],"description":"Agent to launch: Fluck inside BOSS, other agents in terminal (default claude)"},
+                "task":{"type":"string","description":"Optional evolution request passed to the agent"},
                 "repo_path":{"type":"string","description":"Source repo path; omitted = auto-detected in the workspace"}
             },"required":["plugin_id"]}""".trimIndent(),
             readOnly = false,
@@ -214,13 +214,17 @@ class ToolEvolverMcpToolProvider(
             .map { "${it.formatTimestamp()} ${it.message.take(400)}" }
     }
 
-    private fun evolve(pluginId: String, agentId: String?, task: String?, repoPath: String?): McpToolResult {
+    private suspend fun evolve(pluginId: String, agentId: String?, task: String?, repoPath: String?): McpToolResult {
         val target = services.findTool(pluginId)
             ?: return McpToolResult("No loaded plugin with id $pluginId", isError = true)
         val agent = CliAgent.fromId(agentId) ?: CliAgent.CLAUDE_CODE
-        if (!agent.isInstalled()) {
+        if (agentId != null && CliAgent.fromId(agentId) == null) {
+            return McpToolResult("Unknown agent '$agentId'. Choose fluck/claude/codex/gemini/opencode.", isError = true)
+        }
+        if (!services.evolveLauncher.agentAvailable(agent)) {
             return McpToolResult(
-                "${agent.displayName} CLI ('${agent.binary}') is not installed on this machine — install it or pick another agent (claude/codex/gemini/opencode).",
+                if (agent.isNative) "Fluck Agent is unavailable — install or enable it, then retry."
+                else "${agent.displayName} CLI ('${agent.binary}') is not installed — install it or pick another agent (fluck/claude/codex/gemini/opencode).",
                 isError = true,
             )
         }

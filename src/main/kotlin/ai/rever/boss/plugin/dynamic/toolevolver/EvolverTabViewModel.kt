@@ -167,7 +167,7 @@ class EvolverTabViewModel(
      * CLI can't be launched). Optimistic until the async check completes; refreshed
      * with the target so installing a CLI mid-session is picked up on Refresh.
      */
-    private val _agentAvailability = MutableStateFlow(CliAgent.entries.associateWith { true })
+    private val _agentAvailability = MutableStateFlow(CliAgent.entries.associateWith { false })
     val agentAvailability: StateFlow<Map<CliAgent, Boolean>> = _agentAvailability.asStateFlow()
 
     /** Whether git is installed — gates clone and worktree mode. */
@@ -254,12 +254,12 @@ class EvolverTabViewModel(
 
     fun refreshTarget() {
         scope.launch(Dispatchers.IO) {
-            _agentAvailability.value = CliAgent.entries.associateWith { it.isInstalled() }
+            _agentAvailability.value = CliAgent.entries.associateWith { services.evolveLauncher.agentAvailable(it) }
             _gitInstalled.value = CliAgent.binaryOnPath("git")
             _target.value = services.findTool(targetPluginId)
             _isLoaded.value = services.loader?.isPluginLoaded(targetPluginId) ?: false
             _instances.value = services.loader?.getRunningInstanceCount(targetPluginId) ?: 0
-            if (_repoPath.value == null) {
+            if (_repoPath.value.isNullOrBlank()) {
                 _target.value?.let { t ->
                     _repoPath.value = services.evolveLauncher.resolveSourceRepo(t)?.absolutePath
                 }
@@ -429,41 +429,46 @@ class EvolverTabViewModel(
             return
         }
         if (_agentAvailability.value[agent] != true) {
-            appendAction("${agent.displayName} CLI ('${agent.binary}') is not installed — install it and hit Refresh.")
-            services.toastError("${agent.binary} not found on PATH")
+            val message = if (agent.isNative) "Install or enable Fluck Agent, then refresh."
+                else "${agent.displayName} CLI ('${agent.binary}') is not installed — install it and refresh."
+            appendAction(message)
+            services.toastError(message)
             return
         }
         if (_target.value == null) {
             appendAction("Plugin is not loaded — cannot evolve")
             return
         }
-        if (_repoPath.value == null) {
+        if (_repoPath.value.isNullOrBlank()) {
             appendAction("No source repo — set one (searched the workspace roots without a match)")
             return
         }
+        if (!_busy.compareAndSet(expect = false, update = true)) return
         scope.launch {
-            // Resolve the working dir (creating a worktree in worktree mode), then
-            // honor a remembered open-location or show the chooser dialog.
-            val resolved = resolveWorkDir() ?: return@launch
-            val (dir, branch) = resolved
-            val remembered = services.getRememberedOpenLocation()
-            if (remembered != null) doLaunch(agent, remembered, dir, branch)
-            else _pendingOpen.value = PendingOpen.Evolve(agent, dir.absolutePath, branch)
+            try {
+                val resolved = resolveWorkDir() ?: return@launch
+                val (dir, branch) = resolved
+                val remembered = services.getRememberedOpenLocation()
+                if (remembered != null) doLaunch(agent, remembered, dir, branch)
+                else _pendingOpen.value = PendingOpen.Evolve(agent, dir.absolutePath, branch)
+            } finally {
+                _busy.value = false
+            }
         }
     }
 
     /** Focus the terminal tab of a previously launched evolution session. */
     fun focusSessionTerminal(session: EvolveSession) {
         val provider = services.context.activeTabsProvider ?: run {
-            appendAction("Cannot focus terminal — host does not expose active tabs")
+            appendAction("Cannot focus session — host does not expose active tabs")
             return
         }
         scope.launch {
             runCatching { provider.refreshTabs() }
             val tab = provider.activeTabs.value.firstOrNull { it.tabId == session.tabId }
             if (tab == null) {
-                appendAction("${session.agent.displayName} session terminal is no longer open")
-                services.toastError("That session's terminal tab was closed")
+                appendAction("${session.agent.displayName} session is no longer open")
+                services.toastError("That session's tab was closed")
             } else {
                 provider.selectTab(tab.tabId, tab.panelId)
             }
@@ -472,6 +477,10 @@ class EvolverTabViewModel(
 
     /** Relaunch an agent in an existing worktree. */
     fun reopenWorktree(wt: WorktreeInfo, agent: CliAgent) {
+        if (!services.evolveAllowed() || !services.evolveLauncher.agentAvailable(agent)) {
+            appendAction("Cannot start ${agent.displayName}: check your permission and agent availability, then refresh.")
+            return
+        }
         val dir = File(wt.path)
         scope.launch {
             val remembered = services.getRememberedOpenLocation()

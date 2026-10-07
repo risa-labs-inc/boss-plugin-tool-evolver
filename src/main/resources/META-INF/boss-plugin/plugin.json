@@ -3,10 +3,10 @@
   "pluginId": "ai.rever.boss.plugin.dynamic.toolevolver",
   "displayName": "Tool Evolver",
   "version": "0.1.0",
-  "description": "Probe and evolve installed tools: per-plugin memory + leak signals + logs, and AI-driven evolution (Claude Code, Codex, Gemini, OpenCode) with hot reload and PR creation",
+  "description": "Probe and evolve installed tools: per-plugin memory + leak signals + logs, and AI-driven evolution (Fluck Agent, Claude Code, Codex, Gemini, OpenCode) with hot reload and PR creation",
   "author": "Risa Labs",
-  "apiVersion": "1.0.72",
-  "minApiVersion": "1.0.72",
+  "apiVersion": "1.0.97",
+  "minApiVersion": "1.0.97",
   "minBossVersion": "9.2.35",
   "mainClass": "ai.rever.boss.plugin.dynamic.toolevolver.ToolEvolverDynamicPlugin",
   "type": "mixed"

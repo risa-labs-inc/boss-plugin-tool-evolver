@@ -1,11 +1,18 @@
 package ai.rever.boss.plugin.dynamic.toolevolver
 
 import ai.rever.boss.plugin.api.LoadedPluginInfo
+import ai.rever.boss.plugin.api.McpToolRegistry
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
 import ai.rever.boss.plugin.api.TabSplitMode
 import ai.rever.boss.plugin.tab.terminal.TerminalTabInfo
 import ai.rever.boss.plugin.tab.terminal.TerminalTabType
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,11 +23,11 @@ import kotlinx.coroutines.flow.update
  * host's terminal-link chooser. Splits use [TabSplitMode] via
  * [ai.rever.boss.plugin.api.SplitViewOperations.openTabInSplit]; NEW_TAB uses openTab.
  */
-enum class EvolveOpenLocation(val label: String) {
-    NEW_TAB("new tab"),
-    EXISTING_SPLIT("existing split"),
-    SPLIT_RIGHT("split right"),
-    SPLIT_DOWN("split down"),
+enum class EvolveOpenLocation(val label: String, val mcpLocation: String) {
+    NEW_TAB("new tab", "new_tab"),
+    EXISTING_SPLIT("existing split", "existing_split"),
+    SPLIT_RIGHT("split right", "split_right"),
+    SPLIT_DOWN("split down", "split_down"),
 }
 
 /**
@@ -55,6 +62,19 @@ data class EvolveSession(
  * via the `evolver_hot_reload` MCP tool → verify → open a PR.
  */
 class EvolveLauncher(private val services: EvolverServices) {
+
+
+
+    fun agentAvailable(agent: CliAgent): Boolean = try {
+        if (agent.isNative) nativeAvailable(services.context.mcpToolRegistry)
+        else agent.isInstalled()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: LinkageError) {
+        false // Older hosts may not expose the public MCP registry contract.
+    } catch (_: Exception) {
+        false
+    }
 
     /** Session-scoped manual repo choices, keyed by pluginId. */
     private val repoOverrides = ConcurrentHashMap<String, String>()
@@ -270,7 +290,7 @@ class EvolveLauncher(private val services: EvolverServices) {
     }
 
     /** Write skills + open the CLI terminal. Returns a human-readable status. */
-    fun launchEvolve(
+    suspend fun launchEvolve(
         info: LoadedPluginInfo,
         agent: CliAgent,
         repoDir: File,
@@ -279,33 +299,84 @@ class EvolveLauncher(private val services: EvolverServices) {
         branch: String? = null,
     ): Result<String> = runCatching {
         require(repoDir.isDirectory) { "Source repo not found: ${repoDir.absolutePath}" }
+        require(agentAvailable(agent)) {
+            if (agent.isNative) "Install or enable Fluck Agent, then refresh to continue."
+            else "${agent.displayName} is not installed (${agent.binary})."
+        }
         writeSkills(info, repoDir, branch)
-        val ops = services.context.splitViewOperations
-            ?: error("Terminal unavailable — run manually: cd ${repoDir.absolutePath} && ${agent.launchCommand(task)}")
         val label = branch?.removePrefix("evolve/")?.let { " ($it)" } ?: ""
-        val tabInfo = TerminalTabInfo(
-            id = "evolve-${info.pluginId}-${System.currentTimeMillis()}",
-            typeId = TerminalTabType.typeId,
-            title = "Evolve: ${info.displayName}$label",
-            initialCommand = agent.launchCommand(task),
-            workingDirectory = repoDir.absolutePath,
-        )
-        when (location) {
-            EvolveOpenLocation.NEW_TAB -> ops.openTab(tabInfo)
-            EvolveOpenLocation.EXISTING_SPLIT -> ops.openTabInSplit(tabInfo, TabSplitMode.EXISTING_SPLIT)
-            EvolveOpenLocation.SPLIT_RIGHT -> ops.openTabInSplit(tabInfo, TabSplitMode.VERTICAL_SPLIT)
-            EvolveOpenLocation.SPLIT_DOWN -> ops.openTabInSplit(tabInfo, TabSplitMode.HORIZONTAL_SPLIT)
+        val tabId = if (agent.isNative) {
+            val registry = services.context.mcpToolRegistry
+                ?: error("Fluck Agent launch is unavailable; enable its fluck_launch tool and refresh.")
+            nativeFluckTabId(registry, repoDir, nativePrompt(info.displayName, repoDir, task), "Evolve: ${info.displayName}$label", location)
+        } else {
+            val ops = services.context.splitViewOperations
+                ?: error("BOSS tab operations are unavailable; cannot open ${agent.displayName}.")
+            val tabInfo = TerminalTabInfo(
+                id = "evolve-${info.pluginId}-${System.currentTimeMillis()}",
+                typeId = TerminalTabType.typeId,
+                title = "Evolve: ${info.displayName}$label",
+                initialCommand = agent.launchCommand(task),
+                workingDirectory = repoDir.absolutePath,
+            )
+            when (location) {
+                EvolveOpenLocation.NEW_TAB -> ops.openTab(tabInfo)
+                EvolveOpenLocation.EXISTING_SPLIT -> ops.openTabInSplit(tabInfo, TabSplitMode.EXISTING_SPLIT)
+                EvolveOpenLocation.SPLIT_RIGHT -> ops.openTabInSplit(tabInfo, TabSplitMode.VERTICAL_SPLIT)
+                EvolveOpenLocation.SPLIT_DOWN -> ops.openTabInSplit(tabInfo, TabSplitMode.HORIZONTAL_SPLIT)
+            }
+            tabInfo.id
         }
         _sessions.update {
             (it + EvolveSession(
                 pluginId = info.pluginId,
                 agent = agent,
-                tabId = tabInfo.id,
+                tabId = tabId,
                 branch = branch,
                 startedAtMs = System.currentTimeMillis(),
             )).takeLast(50)
         }
         "Opened ${agent.displayName} on ${repoDir.absolutePath} (${location.label})"
+    }.onFailure { if (it is CancellationException) throw it }
+
+    companion object {
+        internal fun nativePrompt(displayName: String, repoDir: File, task: String?): String = buildString {
+            appendLine("Evolve the $displayName BOSS plugin.")
+            appendLine("Source repository: ${repoDir.absolutePath}")
+            appendLine("Keep all filesystem and command operations scoped to this repository.")
+            appendLine("Read AGENTS.md and .claude/skills/evolve/SKILL.md, then follow the evolve skill: implement, build, hot reload via evolver_hot_reload, verify, and open a PR. Do not push main.")
+            task?.takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("Requested evolution:"); appendLine(it) }
+        }
+
+        private const val FLUCK_PLUGIN_ID = "ai.rever.boss.plugin.dynamic.fluckagent"
+
+        internal fun nativeAvailable(registry: McpToolRegistry?): Boolean = registry?.tools?.value?.any {
+            val owned = it.providerId == FLUCK_PLUGIN_ID ||
+                (it.providerId.startsWith("$FLUCK_PLUGIN_ID::") && it.providerId.length > FLUCK_PLUGIN_ID.length + 2)
+            owned && it.definition.name == "fluck_launch"
+        } == true
+
+        internal suspend fun nativeFluckTabId(
+            registry: McpToolRegistry,
+            repoDir: File,
+            prompt: String,
+            title: String,
+            location: EvolveOpenLocation = EvolveOpenLocation.NEW_TAB,
+        ): String {
+            require(nativeAvailable(registry)) { "Install or enable Fluck Agent and its fluck_launch tool, then refresh." }
+            val arguments = buildJsonObject {
+                put("project", repoDir.absolutePath)
+                put("prompt", prompt)
+                put("title", title)
+                put("location", location.mcpLocation)
+            }.toString()
+            val result = registry.invoke("fluck_launch", arguments)
+            check(!result.isError) { result.text.ifBlank { "Fluck Agent could not open a conversation." } }
+            val tabId = runCatching { Json.parseToJsonElement(result.text).jsonObject["tab_id"] as? JsonPrimitive }.getOrNull()
+            check(tabId?.isString == true && tabId.content.isNotBlank()) { "Fluck Agent returned no conversation tab id." }
+            return tabId.content
+        }
+
     }
 
     /**

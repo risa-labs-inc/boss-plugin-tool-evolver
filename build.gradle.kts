@@ -27,16 +27,20 @@ dependencies {
         // workspace. Walk up from the project dir so .worktrees/<slug> checkouts
         // resolve it at any depth, keyed on the jar itself so a stray directory
         // that merely shares the name can't shadow the real repo.
-        val apiJarRel = "build/libs/boss-plugin-api-1.0.72.jar"
+        val apiJarRel = "build/libs/boss-plugin-api-1.0.97.jar"
         val apiJar = generateSequence(projectDir.parentFile) { it.parentFile }
             .map { it.resolve("boss-plugin-api").resolve(apiJarRel) }
             .firstOrNull { it.isFile }
             ?: projectDir.parentFile.resolve("boss-plugin-api").resolve(apiJarRel)
         compileOnly(files(apiJar))
+        testImplementation(files(apiJar))
     } else {
         // CI: downloaded JAR
         compileOnly(files("build/downloaded-deps/boss-plugin-api.jar"))
+        testImplementation(files("build/downloaded-deps/boss-plugin-api.jar"))
     }
+
+    testImplementation(kotlin("test"))
 
     implementation(compose.desktop.currentOs)
     implementation(compose.runtime)
@@ -49,6 +53,7 @@ dependencies {
     implementation("com.arkivanov.decompose:decompose:3.3.0")
     implementation("com.arkivanov.essenty:lifecycle:2.5.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
 }
 
 // Thin plugin JAR: compiled classes + manifest only (API and Compose come from the host)

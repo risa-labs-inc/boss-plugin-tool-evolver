@@ -12,6 +12,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.Divider
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Tab
@@ -66,14 +70,14 @@ private fun EvolverTabScreen(viewModel: EvolverTabViewModel) {
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colors.background)) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
                     target?.displayName ?: viewModel.tabInfo.targetDisplayName,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 16.sp,
+                    fontSize = 18.sp,
                     color = MaterialTheme.colors.onBackground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -89,6 +93,9 @@ private fun EvolverTabScreen(viewModel: EvolverTabViewModel) {
                 )
             }
             Spacer(Modifier.width(8.dp))
+            IconButton(onClick = viewModel::refreshTarget) {
+                Icon(Icons.Default.Refresh, "Refresh agent availability and plugin")
+            }
             StatusChip(
                 enabled = target?.isEnabled ?: false,
                 healthy = target?.healthy ?: false,
