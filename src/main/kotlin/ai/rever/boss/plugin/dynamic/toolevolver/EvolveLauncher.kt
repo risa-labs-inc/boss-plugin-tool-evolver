@@ -348,8 +348,12 @@ class EvolveLauncher(private val services: EvolverServices) {
             task?.takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("Requested evolution:"); appendLine(it) }
         }
 
+        private const val FLUCK_PLUGIN_ID = "ai.rever.boss.plugin.dynamic.fluckagent"
+
         internal fun nativeAvailable(registry: McpToolRegistry?): Boolean = registry?.tools?.value?.any {
-            it.providerId == "ai.rever.boss.plugin.dynamic.fluckagent" && it.definition.name == "fluck_launch"
+            val owned = it.providerId == FLUCK_PLUGIN_ID ||
+                (it.providerId.startsWith("$FLUCK_PLUGIN_ID::") && it.providerId.length > FLUCK_PLUGIN_ID.length + 2)
+            owned && it.definition.name == "fluck_launch"
         } == true
 
         internal suspend fun nativeFluckTabId(registry: McpToolRegistry, repoDir: File, prompt: String, title: String): String {

@@ -70,6 +70,21 @@ class NativeFluckLaunchTest {
     }
 
     @Test
+    fun `availability accepts host namespaces and rejects lookalike owners`() {
+        val pluginId = "ai.rever.boss.plugin.dynamic.fluckagent"
+        val registry = RecordingRegistry()
+        val tool = registry.tools.value.single()
+        listOf(pluginId, "$pluginId::$pluginId", "$pluginId::authoring").forEach { owner ->
+            registry.tools.value = listOf(tool.copy(providerId = owner))
+            assertTrue(EvolveLauncher.nativeAvailable(registry), owner)
+        }
+        listOf("$pluginId::", "$pluginId-extra::authoring", "other.plugin::$pluginId").forEach { owner ->
+            registry.tools.value = listOf(tool.copy(providerId = owner))
+            assertFalse(EvolveLauncher.nativeAvailable(registry), owner)
+        }
+    }
+
+    @Test
     fun `native agent aliases route to Fluck and never create a shell command`() {
         listOf("fluck", "fluck-agent", "FLUCK_AGENT").forEach { assertEquals(CliAgent.FLUCK_AGENT, CliAgent.fromId(it)) }
         assertTrue(CliAgent.FLUCK_AGENT.isNative)
