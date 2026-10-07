@@ -1,10 +1,12 @@
 package ai.rever.boss.plugin.dynamic.toolevolver
 
 import ai.rever.boss.plugin.api.LoadedPluginInfo
-import ai.rever.boss.plugin.api.NewTabContext
-import ai.rever.boss.plugin.api.TabInfo
-import ai.rever.boss.plugin.api.TabTypeId
-import ai.rever.boss.plugin.api.TabTypeInfo
+import ai.rever.boss.plugin.api.McpToolRegistry
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
 import ai.rever.boss.plugin.api.TabSplitMode
 import ai.rever.boss.plugin.tab.terminal.TerminalTabInfo
 import ai.rever.boss.plugin.tab.terminal.TerminalTabType
@@ -61,15 +63,15 @@ data class EvolveSession(
  */
 class EvolveLauncher(private val services: EvolverServices) {
 
-    private val fluckTypeId = TabTypeId("fluck-agent", "ai.rever.boss.plugin.dynamic.fluckagent")
+
 
     fun agentAvailable(agent: CliAgent): Boolean = try {
-        if (agent.isNative) services.context.tabRegistry.getTabTypeInfo(fluckTypeId)?.newTabSpec != null
+        if (agent.isNative) nativeAvailable(services.context.mcpToolRegistry)
         else agent.isInstalled()
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (_: LinkageError) {
-        false // Older hosts may not expose the new-tab factory contract.
+        false // Older hosts may not expose the public MCP registry contract.
     } catch (_: Exception) {
         false
     }
@@ -288,7 +290,7 @@ class EvolveLauncher(private val services: EvolverServices) {
     }
 
     /** Write skills + open the CLI terminal. Returns a human-readable status. */
-    fun launchEvolve(
+    suspend fun launchEvolve(
         info: LoadedPluginInfo,
         agent: CliAgent,
         repoDir: File,
@@ -301,32 +303,35 @@ class EvolveLauncher(private val services: EvolverServices) {
             if (agent.isNative) "Install or enable Fluck Agent, then refresh to continue."
             else "${agent.displayName} is not installed (${agent.binary})."
         }
-        val ops = services.context.splitViewOperations
-            ?: error("BOSS tab operations are unavailable; cannot open ${agent.displayName}.")
         writeSkills(info, repoDir, branch)
         val label = branch?.removePrefix("evolve/")?.let { " ($it)" } ?: ""
-        val tabInfo = if (agent.isNative) {
-            val factory = services.context.tabRegistry.getTabTypeInfo(fluckTypeId)
-                ?: error("Fluck Agent was disabled; enable it and refresh.")
-            nativeFluckTab(factory, repoDir, services.context.windowId, nativePrompt(info.displayName, repoDir, task))
-        } else TerminalTabInfo(
-            id = "evolve-${info.pluginId}-${System.currentTimeMillis()}",
-            typeId = TerminalTabType.typeId,
-            title = "Evolve: ${info.displayName}$label",
-            initialCommand = agent.launchCommand(task),
-            workingDirectory = repoDir.absolutePath,
-        )
-        when (location) {
-            EvolveOpenLocation.NEW_TAB -> ops.openTab(tabInfo)
-            EvolveOpenLocation.EXISTING_SPLIT -> ops.openTabInSplit(tabInfo, TabSplitMode.EXISTING_SPLIT)
-            EvolveOpenLocation.SPLIT_RIGHT -> ops.openTabInSplit(tabInfo, TabSplitMode.VERTICAL_SPLIT)
-            EvolveOpenLocation.SPLIT_DOWN -> ops.openTabInSplit(tabInfo, TabSplitMode.HORIZONTAL_SPLIT)
+        val tabId = if (agent.isNative) {
+            val registry = services.context.mcpToolRegistry
+                ?: error("Fluck Agent launch is unavailable; enable its fluck_launch tool and refresh.")
+            nativeFluckTabId(registry, repoDir, nativePrompt(info.displayName, repoDir, task), "Evolve: ${info.displayName}$label")
+        } else {
+            val ops = services.context.splitViewOperations
+                ?: error("BOSS tab operations are unavailable; cannot open ${agent.displayName}.")
+            val tabInfo = TerminalTabInfo(
+                id = "evolve-${info.pluginId}-${System.currentTimeMillis()}",
+                typeId = TerminalTabType.typeId,
+                title = "Evolve: ${info.displayName}$label",
+                initialCommand = agent.launchCommand(task),
+                workingDirectory = repoDir.absolutePath,
+            )
+            when (location) {
+                EvolveOpenLocation.NEW_TAB -> ops.openTab(tabInfo)
+                EvolveOpenLocation.EXISTING_SPLIT -> ops.openTabInSplit(tabInfo, TabSplitMode.EXISTING_SPLIT)
+                EvolveOpenLocation.SPLIT_RIGHT -> ops.openTabInSplit(tabInfo, TabSplitMode.VERTICAL_SPLIT)
+                EvolveOpenLocation.SPLIT_DOWN -> ops.openTabInSplit(tabInfo, TabSplitMode.HORIZONTAL_SPLIT)
+            }
+            tabInfo.id
         }
         _sessions.update {
             (it + EvolveSession(
                 pluginId = info.pluginId,
                 agent = agent,
-                tabId = tabInfo.id,
+                tabId = tabId,
                 branch = branch,
                 startedAtMs = System.currentTimeMillis(),
             )).takeLast(50)
@@ -343,9 +348,24 @@ class EvolveLauncher(private val services: EvolverServices) {
             task?.takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("Requested evolution:"); appendLine(it) }
         }
 
-        internal fun nativeFluckTab(factory: TabTypeInfo, repoDir: File, windowId: String?, prompt: String): TabInfo =
-            factory.createTabInfo(prompt, NewTabContext(projectPath = repoDir.absolutePath, windowId = windowId))
-                ?: error("Fluck Agent could not create a conversation; enable it and refresh.")
+        internal fun nativeAvailable(registry: McpToolRegistry?): Boolean = registry?.tools?.value?.any {
+            it.providerId == "ai.rever.boss.plugin.dynamic.fluckagent" && it.definition.name == "fluck_launch"
+        } == true
+
+        internal suspend fun nativeFluckTabId(registry: McpToolRegistry, repoDir: File, prompt: String, title: String): String {
+            require(nativeAvailable(registry)) { "Install or enable Fluck Agent and its fluck_launch tool, then refresh." }
+            val arguments = buildJsonObject {
+                put("project", repoDir.absolutePath)
+                put("prompt", prompt)
+                put("title", title)
+            }.toString()
+            val result = registry.invoke("fluck_launch", arguments)
+            check(!result.isError) { result.text.ifBlank { "Fluck Agent could not open a conversation." } }
+            val tabId = runCatching { Json.parseToJsonElement(result.text).jsonObject["tab_id"] as? JsonPrimitive }.getOrNull()
+            check(tabId?.isString == true && tabId.content.isNotBlank()) { "Fluck Agent returned no conversation tab id." }
+            return tabId.content
+        }
+
     }
 
     /**

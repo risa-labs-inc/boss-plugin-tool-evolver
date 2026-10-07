@@ -854,7 +854,7 @@ private fun AgentButton(
             Text(
                 when {
                     agent.isNative && installed -> "Open a BOSS conversation · no CLI installation required"
-                    agent.isNative -> "Install or enable Fluck Agent, then refresh"
+                    agent.isNative -> "Enable Fluck Agent and its launch tool, then refresh"
                     installed -> "Open in terminal"
                     else -> "Install ${agent.binary} to continue"
                 },

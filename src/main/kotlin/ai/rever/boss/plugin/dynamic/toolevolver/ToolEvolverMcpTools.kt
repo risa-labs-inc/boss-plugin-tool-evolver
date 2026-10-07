@@ -214,7 +214,7 @@ class ToolEvolverMcpToolProvider(
             .map { "${it.formatTimestamp()} ${it.message.take(400)}" }
     }
 
-    private fun evolve(pluginId: String, agentId: String?, task: String?, repoPath: String?): McpToolResult {
+    private suspend fun evolve(pluginId: String, agentId: String?, task: String?, repoPath: String?): McpToolResult {
         val target = services.findTool(pluginId)
             ?: return McpToolResult("No loaded plugin with id $pluginId", isError = true)
         val agent = CliAgent.fromId(agentId) ?: CliAgent.CLAUDE_CODE
