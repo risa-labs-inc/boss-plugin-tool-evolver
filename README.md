@@ -11,13 +11,15 @@ leaving the app.
   - **Probe** - live memory footprint of that plugin (JVM class-histogram attribution), leak
     signals (leaked classloaders after unload, stale open instances, monotonic heap growth), and
     the host log stream filtered to the plugin.
-  - **Evolve** - hand the plugin's source repo to **Claude Code**, **Codex**, **Gemini**, or
-    **OpenCode** in a BossTerm tab, with a generated `evolve` skill carrying full plugin
+  - **Evolve** - hand the plugin's source repo to **Fluck Agent**, **Claude Code**, **Codex**, **Gemini**, or
+    **OpenCode**, with a generated `evolve` skill carrying full plugin
     context. The agent builds, **hot-reloads the plugin into the running BOSS instance** (via the
     `evolver_hot_reload` MCP tool - `~/.boss/plugins` for installed hosts, `~/.boss_debug/plugins`
     for dev hosts), verifies, and finishes by opening a **PR**.
 - **MCP tools** for agents: `evolver_list_tools`, `evolver_probe`, `evolver_open`,
   `evolver_evolve`, `evolver_hot_reload`.
+
+Select **Fluck Agent** in Evolve for a native BOSS conversation bound to the chosen repository or worktree. Install or enable Fluck and refresh if unavailable. Terminal agents still open in BossTerm. Activity reopens the same conversation or terminal; Fluck uses its configured backend and approval settings.
 
 ## Build
 

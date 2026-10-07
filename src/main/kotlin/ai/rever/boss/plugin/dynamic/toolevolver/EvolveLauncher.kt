@@ -1,11 +1,16 @@
 package ai.rever.boss.plugin.dynamic.toolevolver
 
 import ai.rever.boss.plugin.api.LoadedPluginInfo
+import ai.rever.boss.plugin.api.NewTabContext
+import ai.rever.boss.plugin.api.TabInfo
+import ai.rever.boss.plugin.api.TabTypeId
+import ai.rever.boss.plugin.api.TabTypeInfo
 import ai.rever.boss.plugin.api.TabSplitMode
 import ai.rever.boss.plugin.tab.terminal.TerminalTabInfo
 import ai.rever.boss.plugin.tab.terminal.TerminalTabType
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -55,6 +60,19 @@ data class EvolveSession(
  * via the `evolver_hot_reload` MCP tool → verify → open a PR.
  */
 class EvolveLauncher(private val services: EvolverServices) {
+
+    private val fluckTypeId = TabTypeId("fluck-agent", "ai.rever.boss.plugin.dynamic.fluckagent")
+
+    fun agentAvailable(agent: CliAgent): Boolean = try {
+        if (agent.isNative) services.context.tabRegistry.getTabTypeInfo(fluckTypeId)?.newTabSpec != null
+        else agent.isInstalled()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: LinkageError) {
+        false // Older hosts may not expose the new-tab factory contract.
+    } catch (_: Exception) {
+        false
+    }
 
     /** Session-scoped manual repo choices, keyed by pluginId. */
     private val repoOverrides = ConcurrentHashMap<String, String>()
@@ -279,11 +297,19 @@ class EvolveLauncher(private val services: EvolverServices) {
         branch: String? = null,
     ): Result<String> = runCatching {
         require(repoDir.isDirectory) { "Source repo not found: ${repoDir.absolutePath}" }
-        writeSkills(info, repoDir, branch)
+        require(agentAvailable(agent)) {
+            if (agent.isNative) "Install or enable Fluck Agent, then refresh to continue."
+            else "${agent.displayName} is not installed (${agent.binary})."
+        }
         val ops = services.context.splitViewOperations
-            ?: error("Terminal unavailable — run manually: cd ${repoDir.absolutePath} && ${agent.launchCommand(task)}")
+            ?: error("BOSS tab operations are unavailable; cannot open ${agent.displayName}.")
+        writeSkills(info, repoDir, branch)
         val label = branch?.removePrefix("evolve/")?.let { " ($it)" } ?: ""
-        val tabInfo = TerminalTabInfo(
+        val tabInfo = if (agent.isNative) {
+            val factory = services.context.tabRegistry.getTabTypeInfo(fluckTypeId)
+                ?: error("Fluck Agent was disabled; enable it and refresh.")
+            nativeFluckTab(factory, repoDir, services.context.windowId, nativePrompt(info.displayName, repoDir, task))
+        } else TerminalTabInfo(
             id = "evolve-${info.pluginId}-${System.currentTimeMillis()}",
             typeId = TerminalTabType.typeId,
             title = "Evolve: ${info.displayName}$label",
@@ -306,6 +332,20 @@ class EvolveLauncher(private val services: EvolverServices) {
             )).takeLast(50)
         }
         "Opened ${agent.displayName} on ${repoDir.absolutePath} (${location.label})"
+    }.onFailure { if (it is CancellationException) throw it }
+
+    companion object {
+        internal fun nativePrompt(displayName: String, repoDir: File, task: String?): String = buildString {
+            appendLine("Evolve the $displayName BOSS plugin.")
+            appendLine("Source repository: ${repoDir.absolutePath}")
+            appendLine("Keep all filesystem and command operations scoped to this repository.")
+            appendLine("Read AGENTS.md and .claude/skills/evolve/SKILL.md, then follow the evolve skill: implement, build, hot reload via evolver_hot_reload, verify, and open a PR. Do not push main.")
+            task?.takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("Requested evolution:"); appendLine(it) }
+        }
+
+        internal fun nativeFluckTab(factory: TabTypeInfo, repoDir: File, windowId: String?, prompt: String): TabInfo =
+            factory.createTabInfo(prompt, NewTabContext(projectPath = repoDir.absolutePath, windowId = windowId))
+                ?: error("Fluck Agent could not create a conversation; enable it and refresh.")
     }
 
     /**

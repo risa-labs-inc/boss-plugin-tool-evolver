@@ -19,6 +19,7 @@ enum class CliAgent(
      */
     private val autoFlags: String,
 ) {
+    FLUCK_AGENT("Fluck Agent", "", ""),
     CLAUDE_CODE("Claude Code", "claude", "--permission-mode auto"),
     // codex-cli >= 0.144 dropped "on-failure"; "on-request" is the surviving hands-free policy.
     CODEX("Codex", "codex", "--sandbox workspace-write -a on-request"),
@@ -30,11 +31,14 @@ enum class CliAgent(
      * evolve skill already engaged. Kept apostrophe- and quote-free so it
      * survives shell quoting untouched.
      */
+    val isNative: Boolean get() = this == FLUCK_AGENT
+
     fun launchCommand(task: String? = null): String {
         val ask = sanitize(task)
         val suffix = if (ask.isEmpty()) "" else " Requested evolution: $ask"
         val auto = if (autoFlags.isBlank()) "" else " $autoFlags"
         return when (this) {
+            FLUCK_AGENT -> error("Fluck Agent opens inside BOSS, not a terminal")
             CLAUDE_CODE ->
                 if (ask.isEmpty()) "claude$auto \"/evolve\""
                 else "claude$auto \"/evolve $ask\""
@@ -48,7 +52,7 @@ enum class CliAgent(
     }
 
     /** Best-effort check whether the CLI binary is on PATH (or in common install dirs). */
-    fun isInstalled(): Boolean = binaryOnPath(binary)
+    fun isInstalled(): Boolean = !isNative && binaryOnPath(binary)
 
     companion object {
         /**
@@ -79,6 +83,7 @@ enum class CliAgent(
 
         fun fromId(id: String?): CliAgent? = when (id?.lowercase()?.trim()) {
             null, "" -> null
+            "fluck", "fluck_agent", "fluck-agent" -> FLUCK_AGENT
             "claude", "claude_code", "claude-code", "claudecode" -> CLAUDE_CODE
             "codex" -> CODEX
             "gemini" -> GEMINI

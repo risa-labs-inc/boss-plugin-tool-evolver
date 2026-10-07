@@ -5,6 +5,7 @@ import ai.rever.boss.plugin.api.PanelComponentWithUI
 import ai.rever.boss.plugin.api.PanelInfo
 import ai.rever.boss.plugin.ui.BossSearchBar
 import ai.rever.boss.plugin.ui.BossTheme
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Card
+import androidx.compose.material.TextButton
 import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
@@ -31,6 +33,7 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -142,7 +145,11 @@ private fun ToolEvolverPanelContent(viewModel: ToolEvolverPanelViewModel) {
     Box(Modifier.fillMaxSize().background(MaterialTheme.colors.background)) {
         Column(Modifier.fillMaxSize()) {
             PanelHeader(viewModel)
-            Divider(color = MaterialTheme.colors.onSurface.copy(alpha = 0.08f))
+            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Improve the tools you use", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colors.onSurface)
+                Text("Select a plugin to evolve, inspect diagnostics, or report an issue.", fontSize = 12.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f))
+                Text("${filtered.size} of ${tools.size} installed tools", fontSize = 11.sp, color = MaterialTheme.colors.primary)
+            }
             ToolSearchField(
                 value = panelQuery,
                 onValueChange = viewModel::setPanelQuery,
@@ -158,7 +165,7 @@ private fun ToolEvolverPanelContent(viewModel: ToolEvolverPanelViewModel) {
                     )
                 }
             } else {
-                LazyColumn(Modifier.fillMaxSize()) {
+                LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(filtered, key = { it.pluginId }) { tool ->
                         ToolRow(tool, onClick = { viewModel.openEvolver(tool) })
                     }
@@ -217,7 +224,10 @@ private fun PanelHeader(viewModel: ToolEvolverPanelViewModel) {
 @Composable
 private fun ToolRow(tool: LoadedPluginInfo, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth()
+            .border(1.dp, MaterialTheme.colors.onSurface.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colors.surface, RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -234,19 +244,22 @@ private fun ToolRow(tool: LoadedPluginInfo, onClick: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text(
                 tool.displayName,
-                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                fontSize = 13.sp,
                 color = MaterialTheme.colors.onBackground,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "v${tool.version}" + if (tool.isEnabled) "" else " · disabled",
+                "v${tool.version}" + when { !tool.isEnabled -> " · disabled"; !tool.healthy -> " · needs attention"; else -> " · ready" },
                 fontSize = 10.sp,
                 color = MaterialTheme.colors.onSurface.copy(alpha = 0.5f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        Spacer(Modifier.width(6.dp))
+        Icon(Icons.Default.ChevronRight, "Open evolver", Modifier.size(16.dp), tint = MaterialTheme.colors.onSurface.copy(alpha = 0.4f))
     }
 }
 

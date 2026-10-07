@@ -11,8 +11,8 @@ import compose.icons.feathericons.TrendingUp
 // Issue second, Probe last.
 enum class EvolverSection(val label: String) {
     EVOLVE("Evolve"),
-    ISSUE("Issue"),
-    PROBE("Probe"),
+    ISSUE("Report issue"),
+    PROBE("Diagnostics"),
 }
 
 object EvolverTabType : TabTypeInfo {

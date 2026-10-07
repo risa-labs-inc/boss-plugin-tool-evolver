@@ -4,11 +4,11 @@
 
 **Tool Evolver** (`ai.rever.boss.plugin.dynamic.toolevolver`) is a dynamic plugin for the BOSS desktop application.
 
-Probe and evolve installed tools (plugins): per-plugin memory footprint + leak signals + logs, and AI-driven evolution with Claude Code, Codex, Gemini, or OpenCode - including live hot reload and PR creation.
+Probe and evolve installed tools (plugins): per-plugin memory footprint + leak signals + logs, and AI-driven evolution with native Fluck Agent, Claude Code, Codex, Gemini, or OpenCode - including live hot reload and PR creation.
 
 - **Plugin ID**: `ai.rever.boss.plugin.dynamic.toolevolver`
 - **Main Class**: `ai.rever.boss.plugin.dynamic.toolevolver.ToolEvolverDynamicPlugin`
-- **API Version**: 1.0.72 (BossDialog needs a host that pins it - see minBossVersion in plugin.json)
+- **API Version**: 1.0.97 (BossDialog needs a host that pins it - see minBossVersion in plugin.json)
 
 ## Essential Commands
 
@@ -49,6 +49,7 @@ build.gradle.kts   → Build config + version (single source of truth)
     override via directory picker), writes the `evolve` skill in all four CLI formats
     (`.claude/skills/`, `.codex/skills/`, `.gemini/commands/`, `.opencode/command/`), and opens a
     BossTerm tab (`TerminalTabInfo(initialCommand, workingDirectory)`) running the chosen CLI.
+    Native Fluck uses the registered `fluck-agent` tab factory with `NewTabContext(projectPath)`; its real tab id is retained for conversation focus. It requires Fluck installed/enabled, no CLI.
     Also offers "Rebuild & hot reload now" (`HotReloader.rebuildAndReload`: `./gradlew
     buildPluginJar` via ProcessBuilder, then live reload).
 - **Hot reload** (`HotReloader`): copies a built jar into the RUNNING host's plugins dir
