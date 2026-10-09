@@ -97,6 +97,9 @@ class EvolveLauncher(private val services: EvolverServices) {
         }
         val home = System.getProperty("user.home")
         val roots = listOf(
+            File(home, ".boss/workspaces/tools"),
+            // Read-only legacy/source discovery. New clones never land here
+            // unless the user explicitly chooses one of these locations.
             File(home, "Development/Boss/boss_plugins"),
             File(home, "BossTools"),
             File(home, "Development"),
@@ -112,15 +115,10 @@ class EvolveLauncher(private val services: EvolverServices) {
     }
 
     /**
-     * Where evolution checkouts land when cloned: the house plugins umbrella if
-     * present, else a stable ~/BossTools fallback (mirrors tool-creator).
+     * Where evolution checkouts land when cloned. User-selected source trees may
+     * live elsewhere, but BOSS-owned defaults stay beneath the durable-data root.
      */
-    fun defaultCloneParent(): File {
-        val home = System.getProperty("user.home")
-        val umbrella = File(home, "Development/Boss/boss_plugins")
-        return if (umbrella.isDirectory) umbrella
-        else File(home, "BossTools").apply { mkdirs() }
-    }
+    fun defaultCloneParent(): File = defaultCloneParent(System.getProperty("user.home"))
 
     /**
      * Best-effort git URL for a plugin's repo: its manifest [LoadedPluginInfo.url]
@@ -340,6 +338,14 @@ class EvolveLauncher(private val services: EvolverServices) {
     }.onFailure { if (it is CancellationException) throw it }
 
     companion object {
+        internal fun defaultCloneParent(userHome: String): File {
+            val bossRoot = File(userHome, ".boss").canonicalFile
+            val tools = File(bossRoot, "workspaces/tools").canonicalFile
+            require(tools.toPath().startsWith(bossRoot.toPath())) { "tool workspace escaped the BOSS root" }
+            check(tools.exists() || tools.mkdirs()) { "Could not create BOSS tool workspace: $tools" }
+            return tools
+        }
+
         internal fun nativePrompt(displayName: String, repoDir: File, task: String?): String = buildString {
             appendLine("Evolve the $displayName BOSS plugin.")
             appendLine("Source repository: ${repoDir.absolutePath}")
