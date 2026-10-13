@@ -46,6 +46,12 @@ class BuildJavaHomeTest {
     }
 
     @Test
+    fun `a blank inherited JAVA_HOME falls through`() {
+        val host = jdk("host")
+        assertEquals(host, buildJavaHome("", host) { null })
+    }
+
+    @Test
     fun `no usable home leaves JAVA_HOME unset`() {
         assertNull(buildJavaHome(null, jlinkedRuntime()) { null })
     }

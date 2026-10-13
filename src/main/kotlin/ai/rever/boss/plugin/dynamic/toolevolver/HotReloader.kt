@@ -114,13 +114,19 @@ internal fun buildJavaHome(
     return usable(inherited) ?: usable(hostJavaHome) ?: usable(systemJavaHome())
 }
 
-private fun hasJavaLauncher(home: File): Boolean =
-    File(home, "bin/java").canExecute() || File(home, "bin/java.exe").isFile
+private fun hasJavaLauncher(home: File): Boolean = File(home, "bin/java").canExecute()
 
+// Wait before reading: reading first blocks until the child closes stdout, so a hung
+// java_home would never reach the timeout. Its output is one short line, well under
+// the pipe buffer. `-v 17+`: Gradle's daemon will not start on anything older.
 private fun macSystemJavaHome(): String? = runCatching {
     val tool = File("/usr/libexec/java_home")
     if (!tool.canExecute()) return null
-    val process = ProcessBuilder(tool.path).redirectErrorStream(true).start()
+    val process = ProcessBuilder(tool.path, "-v", "17+").redirectErrorStream(true).start()
+    if (!process.waitFor(10, TimeUnit.SECONDS)) {
+        process.destroyForcibly()
+        return null
+    }
     val out = process.inputStream.bufferedReader().readText().trim()
-    if (process.waitFor(10, TimeUnit.SECONDS) && process.exitValue() == 0) out else null
+    if (process.exitValue() == 0) out else null
 }.getOrNull()
