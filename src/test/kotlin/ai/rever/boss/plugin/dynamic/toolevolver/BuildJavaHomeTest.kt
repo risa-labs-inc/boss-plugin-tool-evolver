@@ -6,6 +6,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.fail
 
 class BuildJavaHomeTest {
     private val root = Files.createTempDirectory("java-home-test").toFile()
@@ -49,6 +50,12 @@ class BuildJavaHomeTest {
     fun `a blank inherited JAVA_HOME falls through`() {
         val host = jdk("host")
         assertEquals(host, buildJavaHome("", host) { null })
+    }
+
+    @Test
+    fun `a usable host home never runs the system JDK lookup`() {
+        val host = jdk("host")
+        assertEquals(host, buildJavaHome(null, host) { fail("systemJavaHome must not run when the host home is usable") })
     }
 
     @Test

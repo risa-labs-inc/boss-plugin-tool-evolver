@@ -104,6 +104,10 @@ class HotReloader(private val services: EvolverServices) {
  * The JDK home a plugin build should run on: the caller's JAVA_HOME, else the host's
  * java.home, else macOS's `/usr/libexec/java_home` - the first that has a `bin/java`.
  * Null means none does, and gradlew should find `java` on the PATH itself.
+ *
+ * The JDK 17+ floor applies only to the discovered macOS JDK. An inherited JAVA_HOME
+ * or the host's java.home is trusted as the user's choice and checked for a launcher
+ * alone. [systemJavaHome] runs only when neither of those is usable.
  */
 internal fun buildJavaHome(
     inherited: String?,
@@ -119,10 +123,13 @@ private fun hasJavaLauncher(home: File): Boolean = File(home, "bin/java").canExe
 // Wait before reading: reading first blocks until the child closes stdout, so a hung
 // java_home would never reach the timeout. Its output is one short line, well under
 // the pipe buffer. `-v 17+`: Gradle's daemon will not start on anything older.
+// stderr is discarded so a warning can never be read as part of the path.
 private fun macSystemJavaHome(): String? = runCatching {
     val tool = File("/usr/libexec/java_home")
     if (!tool.canExecute()) return null
-    val process = ProcessBuilder(tool.path, "-v", "17+").redirectErrorStream(true).start()
+    val process = ProcessBuilder(tool.path, "-v", "17+")
+        .redirectError(ProcessBuilder.Redirect.DISCARD)
+        .start()
     if (!process.waitFor(10, TimeUnit.SECONDS)) {
         process.destroyForcibly()
         return null
