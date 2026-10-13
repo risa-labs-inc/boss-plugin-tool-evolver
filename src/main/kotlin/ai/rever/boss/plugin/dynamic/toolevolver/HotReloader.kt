@@ -73,8 +73,12 @@ class HotReloader(private val services: EvolverServices) {
             .also { pb ->
                 val env = pb.environment()
                 // The packaged host launches with a bare PATH and no JAVA_HOME;
-                // gradlew needs both to find a JVM and common tooling.
-                env["JAVA_HOME"] = env["JAVA_HOME"] ?: System.getProperty("java.home")
+                // gradlew needs both to find a JVM and common tooling. The host's
+                // own java.home is a jlinked runtime with no bin/java in the
+                // packaged app, and gradlew rejects it ("JAVA_HOME is set to an
+                // invalid directory"), so only a home with a launcher is passed.
+                val javaHome = buildJavaHome(env["JAVA_HOME"])
+                if (javaHome != null) env["JAVA_HOME"] = javaHome else env.remove("JAVA_HOME")
                 val home = System.getProperty("user.home")
                 val extras = listOf("$home/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin")
                 env["PATH"] = (extras + (env["PATH"] ?: "")).joinToString(File.pathSeparator)
@@ -95,3 +99,28 @@ class HotReloader(private val services: EvolverServices) {
         hotReload(pluginId, jar.absolutePath).getOrThrow()
     }
 }
+
+/**
+ * The JDK home a plugin build should run on: the caller's JAVA_HOME, else the host's
+ * java.home, else macOS's `/usr/libexec/java_home` - the first that has a `bin/java`.
+ * Null means none does, and gradlew should find `java` on the PATH itself.
+ */
+internal fun buildJavaHome(
+    inherited: String?,
+    hostJavaHome: String? = System.getProperty("java.home"),
+    systemJavaHome: () -> String? = ::macSystemJavaHome,
+): String? {
+    fun usable(dir: String?) = dir?.takeIf { it.isNotBlank() && hasJavaLauncher(File(it)) }
+    return usable(inherited) ?: usable(hostJavaHome) ?: usable(systemJavaHome())
+}
+
+private fun hasJavaLauncher(home: File): Boolean =
+    File(home, "bin/java").canExecute() || File(home, "bin/java.exe").isFile
+
+private fun macSystemJavaHome(): String? = runCatching {
+    val tool = File("/usr/libexec/java_home")
+    if (!tool.canExecute()) return null
+    val process = ProcessBuilder(tool.path).redirectErrorStream(true).start()
+    val out = process.inputStream.bufferedReader().readText().trim()
+    if (process.waitFor(10, TimeUnit.SECONDS) && process.exitValue() == 0) out else null
+}.getOrNull()
